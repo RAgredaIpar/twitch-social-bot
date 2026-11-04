@@ -1,0 +1,37 @@
+# Binaries and build artifacts
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+twitch-social-bot
+
+# Test binary and coverage
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Local environment, secrets and OAuth tokens
+.env
+.env.*
+!.env.example
+.tokens.json
+
+# Embedded SQLite databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+data/
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
