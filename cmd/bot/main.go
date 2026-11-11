@@ -1,0 +1,208 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/twitch-social-bot/internal/config"
+	"github.com/twitch-social-bot/internal/domain"
+	"github.com/twitch-social-bot/internal/engine"
+	"github.com/twitch-social-bot/internal/llm"
+	"github.com/twitch-social-bot/internal/persona"
+	"github.com/twitch-social-bot/internal/ratelimit"
+	"github.com/twitch-social-bot/internal/room"
+	"github.com/twitch-social-bot/internal/safety"
+	"github.com/twitch-social-bot/internal/server"
+	"github.com/twitch-social-bot/internal/social"
+	"github.com/twitch-social-bot/internal/store"
+	"github.com/twitch-social-bot/internal/twitch"
+)
+
+type stdoutSender struct{}
+
+func (s *stdoutSender) SendReply(ctx context.Context, broadcasterID, senderID, replyParentID, text string) error {
+	log.Printf("[CHAT OUT] (replyTo: %s): %s", replyParentID, text)
+	return nil
+}
+
+func main() {
+	envFile := flag.String("env", ".env", "Ruta al archivo .env de variables de entorno")
+	flag.Parse()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cfg, err := config.Load(*envFile)
+	if err != nil {
+		log.Fatalf("Error cargando configuración: %v", err)
+	}
+
+	st, err := store.Open(cfg.StorePath)
+	if err != nil {
+		log.Fatalf("Error abriendo almacén persistente (%s): %v", cfg.StorePath, err)
+	}
+	defer func() {
+		if err := st.Close(); err != nil {
+			log.Printf("Error cerrando almacén persistente: %v", err)
+		}
+	}()
+
+	pm, err := persona.NewManager(cfg.PersonaDir, cfg.PersonaFile)
+	if err != nil {
+		log.Fatalf("Error inicializando personalidades: %v", err)
+	}
+	activePersona := pm.Current()
+	log.Printf("Personalidad activa inicial: %s (%s)", activePersona.Name, activePersona.ID)
+
+	clk := domain.NewRealClock()
+	lim := ratelimit.NewCooldownLimiter(clk, cfg.GlobalCooldown, cfg.UserCooldown)
+	rm := room.NewBuffer(clk, cfg.RoomBufferSize, cfg.RoomBufferMaxAge)
+	soc := social.NewEngine(clk)
+	grd := safety.NewGuard(400, 480)
+
+	llmCli := llm.NewClient(llm.ClientConfig{
+		BaseURL: cfg.LLMBaseURL,
+		APIKey:  cfg.LLMAPIKey,
+		Model:   cfg.LLMModel,
+		Timeout: cfg.LLMTimeout,
+	}, clk)
+
+	var sender domain.ChatSender
+	var broadcasterID string
+	var botUserID string
+
+	hasTwitchCreds := cfg.TwitchClientID != "" && cfg.TwitchBroadcasterLogin != ""
+
+	if hasTwitchCreds {
+		tm := twitch.NewTokenManager(twitch.TokenManagerConfig{
+			ClientID:            cfg.TwitchClientID,
+			TokenFile:           cfg.TokenFile,
+			InitialAccessToken:  cfg.TwitchAccessToken,
+			InitialRefreshToken: cfg.TwitchRefreshToken,
+		}, clk)
+
+		tok, err := tm.AccessToken(ctx)
+		if err != nil || tok == "" {
+			log.Println("No se encontró token de Twitch válido. Iniciando OAuth Device Code Flow...")
+			dfr, err := tm.StartDeviceFlow(ctx, []string{"user:read:chat", "user:write:chat"})
+			if err != nil {
+				log.Fatalf("Error iniciando Device Flow: %v", err)
+			}
+			fmt.Println("=================================================================")
+			fmt.Printf("¡AUTORIZACIÓN DE TWITCH REQUERIDA!\n")
+			fmt.Printf("Visita: %s\n", dfr.VerificationURI)
+			fmt.Printf("Código: %s\n", dfr.UserCode)
+			fmt.Println("=================================================================")
+			fmt.Println("Esperando confirmación en el navegador...")
+
+			_, err = tm.PollDeviceToken(ctx, dfr.DeviceCode, time.Duration(dfr.Interval)*time.Second)
+			if err != nil {
+				log.Fatalf("Error autorizando token de Twitch: %v", err)
+			}
+			log.Println("¡Autorización exitosa! Tokens guardados en", cfg.TokenFile)
+		}
+
+		helixCli := twitch.NewHelixClient(twitch.HelixConfig{
+			ClientID:     cfg.TwitchClientID,
+			TokenManager: tm,
+		})
+		sender = helixCli
+
+		usersToResolve := []string{cfg.TwitchBroadcasterLogin}
+		if cfg.TwitchBotLogin != "" {
+			usersToResolve = append(usersToResolve, cfg.TwitchBotLogin)
+		}
+		resolved, err := helixCli.ResolveUsers(ctx, usersToResolve)
+		if err != nil {
+			log.Fatalf("Error resolviendo IDs de Twitch: %v", err)
+		}
+
+		broadcasterID = resolved[strings.ToLower(cfg.TwitchBroadcasterLogin)]
+		if broadcasterID == "" {
+			log.Fatalf("No se pudo resolver ID para broadcaster: %s", cfg.TwitchBroadcasterLogin)
+		}
+		if cfg.TwitchBotLogin != "" {
+			botUserID = resolved[strings.ToLower(cfg.TwitchBotLogin)]
+		}
+		log.Printf("Twitch configurado: Broadcaster %s (ID: %s), Bot %s (ID: %s)",
+			cfg.TwitchBroadcasterLogin, broadcasterID, cfg.TwitchBotLogin, botUserID)
+	} else {
+		log.Println("Sin credenciales de Twitch completas; operando con emisor estándar.")
+		sender = &stdoutSender{}
+	}
+
+	orch := engine.NewOrchestrator(engine.OrchestratorConfig{
+		BotUserID: botUserID,
+		BotLogin:  cfg.TwitchBotLogin,
+		Clock:     clk,
+		Store:     st,
+		LLM:       llmCli,
+		Sender:    sender,
+		Persona:   pm,
+		Limiter:   lim,
+		Room:      rm,
+		Social:    soc,
+		Guard:     grd,
+	})
+
+	if cfg.HTTPAddr != "" {
+		srv := server.NewServer(cfg.HTTPAddr, orch)
+		go func() {
+			log.Printf("Servidor HTTP de diagnóstico escuchando en http://%s (/healthz, /status)", cfg.HTTPAddr)
+			if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+				log.Printf("Servidor HTTP cerrado: %v", err)
+			}
+		}()
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(shutdownCtx)
+		}()
+	}
+
+	if hasTwitchCreds {
+		esc := twitch.NewEventSubClient(twitch.EventSubConfig{
+			Clock: clk,
+			OnWelcome: func(sessionID string) {
+				log.Printf("Conectado a Twitch EventSub WebSocket (Session: %s). Suscribiendo...", sessionID)
+				if helixClient, ok := sender.(*twitch.HelixClient); ok {
+					if err := helixClient.CreateChatSubscription(ctx, sessionID, broadcasterID, botUserID); err != nil {
+						log.Printf("Error suscribiendo a channel.chat.message: %v", err)
+					} else {
+						log.Printf("¡Suscripción a chat confirmada!")
+					}
+				}
+			},
+			OnChatMessage: func(msg *domain.ChatMessage) {
+				if err := orch.HandleMessage(ctx, *msg); err != nil {
+					log.Printf("Error procesando mensaje de chat: %v", err)
+				}
+			},
+			OnReconnect: func(reconnectURL string) {
+				log.Printf("Recibida reconexión de Twitch EventSub: %s", reconnectURL)
+			},
+		})
+
+		go func() {
+			if err := esc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Printf("EventSub finalizado: %v", err)
+			}
+		}()
+		defer func() {
+			_ = esc.Close()
+		}()
+	}
+
+	log.Println("Bot iniciado y en ejecución. Presiona Ctrl+C para detener.")
+	<-ctx.Done()
+	log.Println("Señal de terminación recibida. Cerrando recursos...")
+}
