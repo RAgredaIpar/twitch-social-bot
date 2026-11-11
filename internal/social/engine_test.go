@@ -200,19 +200,38 @@ func TestApplyDecision_FactsFIFOAndDeduplication(t *testing.T) {
 		t.Fatalf("expected 2 facts after dup attempt, got %d", len(resDup.Facts))
 	}
 
-	// Adding facts up to max and FIFO eviction
+	// Adding facts up to max (default 15) and FIFO eviction
+	var initialFacts []string
+	for i := 1; i <= 15; i++ {
+		initialFacts = append(initialFacts, strings.Repeat("F", i))
+	}
 	p := domain.ViewerProfile{
 		UserID: "u1",
-		Facts:  []string{"F1", "F2", "F3", "F4", "F5"},
+		Facts:  initialFacts,
 	}
-	dNew := domain.LLMDecision{Reply: "ok", NewFact: "F6"}
+	dNew := domain.LLMDecision{Reply: "ok", NewFact: "F_Nuevo"}
 	resFIFO, _, _ := eng.ApplyDecision(spec, p, nil, "msg", dNew)
 
-	if len(resFIFO.Facts) != social.MaxViewerFacts {
-		t.Fatalf("expected %d facts, got %d", social.MaxViewerFacts, len(resFIFO.Facts))
+	if len(resFIFO.Facts) != social.DefaultMaxViewerFacts {
+		t.Fatalf("expected %d facts, got %d", social.DefaultMaxViewerFacts, len(resFIFO.Facts))
 	}
-	if resFIFO.Facts[0] != "F2" || resFIFO.Facts[4] != "F6" {
-		t.Fatalf("expected FIFO eviction (F2..F6), got %+v", resFIFO.Facts)
+	if resFIFO.Facts[0] != initialFacts[1] || resFIFO.Facts[14] != "F_Nuevo" {
+		t.Fatalf("expected FIFO eviction (F2..F_Nuevo), got %+v", resFIFO.Facts)
+	}
+
+	// Custom MaxViewerFacts from PersonaSpec
+	customSpec := samplePersona()
+	customSpec.MaxViewerFacts = 3
+	pCustom := domain.ViewerProfile{
+		UserID: "u1",
+		Facts:  []string{"A", "B", "C"},
+	}
+	resCustom, _, _ := eng.ApplyDecision(customSpec, pCustom, nil, "msg", domain.LLMDecision{Reply: "ok", NewFact: "D"})
+	if len(resCustom.Facts) != 3 {
+		t.Fatalf("expected 3 facts with custom spec limit, got %d", len(resCustom.Facts))
+	}
+	if resCustom.Facts[0] != "B" || resCustom.Facts[2] != "D" {
+		t.Fatalf("expected B, C, D, got %+v", resCustom.Facts)
 	}
 }
 

@@ -22,6 +22,7 @@ bot_name: "TestKiro"
 trigger_prefix: "!test"
 max_positive_delta: 6
 max_negative_delta: -9
+max_viewer_facts: 12
 
 base_persona: |
   Eres un bot de prueba.
@@ -75,6 +76,9 @@ func TestParseYAML_Valid(t *testing.T) {
 	}
 	if spec.MaxNegativeDelta != -9 {
 		t.Errorf("expected MaxNegativeDelta -9, got %d", spec.MaxNegativeDelta)
+	}
+	if spec.MaxViewerFacts != 12 {
+		t.Errorf("expected MaxViewerFacts 12, got %d", spec.MaxViewerFacts)
 	}
 
 	expectedBase := "Eres un bot de prueba.\nSegunda linea con indentacion preservada."

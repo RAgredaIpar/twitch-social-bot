@@ -121,6 +121,9 @@ func TestConfig_Defaults(t *testing.T) {
 	if cfg.RoomBufferSize != 25 {
 		t.Errorf("expected RoomBufferSize 25, got %d", cfg.RoomBufferSize)
 	}
+	if cfg.MaxViewerFacts != 15 {
+		t.Errorf("expected MaxViewerFacts 15, got %d", cfg.MaxViewerFacts)
+	}
 	if cfg.RoomBufferMaxAge != 10*time.Minute {
 		t.Errorf("expected RoomBufferMaxAge 10m, got %v", cfg.RoomBufferMaxAge)
 	}
@@ -291,6 +294,16 @@ func TestConfig_Validation(t *testing.T) {
 			t.Fatal("expected error for ROOM_BUFFER_SIZE <= 0, got nil")
 		}
 	})
+
+	t.Run("non-positive MAX_VIEWER_FACTS", func(t *testing.T) {
+		clearEnv(t)
+		t.Setenv("LLM_API_KEY", "valid-key")
+		t.Setenv("MAX_VIEWER_FACTS", "0")
+		_, err := config.Load("")
+		if err == nil {
+			t.Fatal("expected error for MAX_VIEWER_FACTS <= 0, got nil")
+		}
+	})
 }
 
 func clearEnv(t *testing.T) {
@@ -311,6 +324,7 @@ func clearEnv(t *testing.T) {
 		"GLOBAL_COOLDOWN_MS",
 		"USER_COOLDOWN_MS",
 		"ROOM_BUFFER_SIZE",
+		"MAX_VIEWER_FACTS",
 		"ROOM_BUFFER_MAX_AGE_SEC",
 		"HTTP_ADDR",
 	}

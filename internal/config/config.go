@@ -28,6 +28,7 @@ type Config struct {
 	UserCooldown           time.Duration `json:"user_cooldown"`
 	RoomBufferSize         int           `json:"room_buffer_size"`
 	RoomBufferMaxAge       time.Duration `json:"room_buffer_max_age"`
+	MaxViewerFacts         int           `json:"max_viewer_facts"`
 	HTTPAddr               string        `json:"http_addr"`
 }
 
@@ -105,6 +106,13 @@ func Load(envFile string) (*Config, error) {
 	}
 	cfg.RoomBufferSize = rbSize
 
+	mvfStr := get("MAX_VIEWER_FACTS", "15")
+	mvf, err := strconv.Atoi(mvfStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid MAX_VIEWER_FACTS value: %q", mvfStr)
+	}
+	cfg.MaxViewerFacts = mvf
+
 	rmaStr := get("ROOM_BUFFER_MAX_AGE_SEC", "600")
 	if sec, err := strconv.Atoi(rmaStr); err == nil {
 		cfg.RoomBufferMaxAge = time.Duration(sec) * time.Second
@@ -125,6 +133,9 @@ func Load(envFile string) (*Config, error) {
 	}
 	if cfg.RoomBufferSize <= 0 {
 		return nil, fmt.Errorf("ROOM_BUFFER_SIZE must be > 0, got %d", cfg.RoomBufferSize)
+	}
+	if cfg.MaxViewerFacts <= 0 {
+		return nil, fmt.Errorf("MAX_VIEWER_FACTS must be > 0, got %d", cfg.MaxViewerFacts)
 	}
 
 	return cfg, nil

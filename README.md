@@ -13,7 +13,7 @@ Desarrollado en **Go puro (100% biblioteca estándar, cero dependencias externas
   - Escala de afinidad individual de `-100` a `+100` para cada espectador.
   - Niveles de relación (*Tiers*) dinámicos que alteran el comportamiento y tono del bot.
   - Títulos honoríficos asignados por la IA (*Earned Titles*).
-  - Memoria episódica de hechos aprendidos sobre cada usuario (hasta 5 hechos con deduplicación y política FIFO).
+  - Memoria episódica de hechos aprendidos sobre cada usuario (hasta 15 hechos por defecto, configurable por `.env` y plantilla YAML, con deduplicación y política FIFO).
   - Historial de turnos recientes de conversación por espectador (hasta 4 turnos con política FIFO).
 - **Puestos Sociales Exclusivos (*Social Slots*)**:
   - Títulos únicos con cupos limitados (ej. *Mejor Amigo*, *Archienemigo*, *Mano Derecha*).

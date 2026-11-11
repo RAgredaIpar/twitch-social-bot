@@ -102,6 +102,13 @@ func parseYAMLContent(content string) (*domain.PersonaSpec, error) {
 			}
 			spec.MaxNegativeDelta = v
 			i++
+		case "max_viewer_facts":
+			v, err := parseInt(val)
+			if err != nil {
+				return nil, fmt.Errorf("line %d: invalid max_viewer_facts: %w", i+1, err)
+			}
+			spec.MaxViewerFacts = v
+			i++
 		case "base_persona":
 			if strings.HasPrefix(val, "|") {
 				i++

@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	MaxViewerFacts      = 5
-	MaxRecentTurns      = 4
-	MaxEarnedTitleRunes = 60
+	DefaultMaxViewerFacts = 15
+	MaxRecentTurns        = 4
+	MaxEarnedTitleRunes   = 60
 )
 
 type Engine struct {
@@ -98,11 +98,15 @@ func (e *Engine) ApplyDecision(
 			}
 		}
 		if !exists {
+			maxFacts := DefaultMaxViewerFacts
+			if spec != nil && spec.MaxViewerFacts > 0 {
+				maxFacts = spec.MaxViewerFacts
+			}
 			facts := make([]string, len(profile.Facts), len(profile.Facts)+1)
 			copy(facts, profile.Facts)
 			facts = append(facts, trimmedFact)
-			if len(facts) > MaxViewerFacts {
-				facts = facts[len(facts)-MaxViewerFacts:]
+			if len(facts) > maxFacts {
+				facts = facts[len(facts)-maxFacts:]
 			}
 			profile.Facts = facts
 		}

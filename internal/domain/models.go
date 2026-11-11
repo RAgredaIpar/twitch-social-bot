@@ -75,6 +75,7 @@ type PersonaSpec struct {
 	MaxNegativeDelta int        `json:"max_negative_delta"`
 	BasePersona      string     `json:"base_persona"`
 	BlockedWords     []string   `json:"blocked_words"`
+	MaxViewerFacts   int        `json:"max_viewer_facts,omitempty"`
 	Tiers            []TierSpec `json:"tiers"`
 	Slots            []SlotSpec `json:"slots"`
 }
