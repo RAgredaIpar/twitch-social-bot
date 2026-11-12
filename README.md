@@ -1,158 +1,154 @@
-# 🤖 Twitch Social Bot
+# Twitch Social Bot
 
-> **Bot conversacional con memoria social persistente, afinidad dinámica y personalidades intercambiables en tiempo real para transmisiones en directo de Twitch.**
+Conversational chat agent with persistent social memory, dynamic viewer affinity, and hot-swappable YAML personas designed for live Twitch interactive streams.
 
-Desarrollado en **Go puro (100% biblioteca estándar, cero dependencias externas, cero CGO)**, impulsado por modelos **DeepSeek** con **Context Caching** y conectado de forma nativa a **Twitch EventSub WebSocket**.
+Engineered in pure Go (100% standard library, zero external dependencies, zero CGO), backed by DeepSeek models with prefix caching optimizations, and connected directly to Twitch EventSub via WebSocket.
 
----
-
-## 🌟 Características Principales
-
-- **100% Go Estándar**: Sin dependencias de terceros en `go.mod`. Todo el stack (servidor HTTP, cliente WebSocket, analizador YAML/JSON, limitador de tasa y cliente OAuth) está implementado utilizando exclusivamente la biblioteca estándar de Go.
-- **Memoria Social Persistente**:
-  - Escala de afinidad individual de `-100` a `+100` para cada espectador.
-  - Niveles de relación (*Tiers*) dinámicos que alteran el comportamiento y tono del bot.
-  - Títulos honoríficos asignados por la IA (*Earned Titles*).
-  - Memoria episódica de hechos aprendidos sobre cada usuario (hasta 15 hechos por defecto, configurable por `.env` y plantilla YAML, con deduplicación y política FIFO).
-  - Historial de turnos recientes de conversación por espectador (hasta 4 turnos con política FIFO).
-- **Puestos Sociales Exclusivos (*Social Slots*)**:
-  - Títulos únicos con cupos limitados (ej. *Mejor Amigo*, *Archienemigo*, *Mano Derecha*).
-  - Reglas de asignación automática según afinidad mínima/máxima.
-  - Desafíos de usurpación (*Outrank Steal*): los espectadores con mayor afinidad pueden arrebatar puestos ocupados.
-- **Motor de Personalidades YAML con Recarga en Caliente (*Hot-Reloading*)**:
-  - Define personalidades ricas mediante archivos YAML legibles en la carpeta `personas/`.
-  - Cambia de personalidad en caliente mediante el comando `!bot persona <id>` en el chat sin reiniciar el proceso.
-  - Incluye 4 arquetipos listos para producción:
-    - `cohost_amigos.yaml`: Luna, una co-host amigable, cálida y bromista.
-    - `rpg_facciones.yaml`: Guardián de Facciones con lealtad y rangos de gremio.
-    - `clan_jerarquia.yaml`: Jerarquía de clan tribal con combate por respeto.
-    - `drama_romance.yaml`: Telenovela interactiva cargada de drama y emociones.
-- **DeepSeek con Context Caching & Circuit Breaker**:
-  - Prompt del sistema determinista optimizado para el mecanismo de **Context Caching** de DeepSeek, reduciendo significativamente los costos y la latencia.
-  - Disyuntor (*Circuit Breaker*) de tres estados (`Closed`, `Open`, `Half-Open`) para resiliencia ante caídas del proveedor de IA.
-- **Conectividad Nativa con Twitch**:
-  - Suscripción en tiempo real a `channel.chat.message` mediante **Twitch EventSub WebSocket**.
-  - Flujo de autorización interactivo en terminal mediante **OAuth 2.0 Device Code Flow** (sin necesidad de configurar servidores de callback locales).
-  - Envío de respuestas hiladas a través de **Twitch Helix API**.
-- **Seguridad y Moderación**:
-  - Protección contra inyecciones de prompt y caracteres de control.
-  - Sanitización estricta de salidas para evitar ejecución de comandos de Twitch (`/ban`, `.timeout`, etc.).
-  - Reemplazo automático de enlaces externos y filtrado de palabras bloqueadas.
-  - Cooldowns configurables: global (ej. 3s) y por usuario (ej. 15s) para evitar spam.
-- **Pasarela HTTP de Diagnóstico**:
-  - Endpoints ligeros `/healthz` y `/status` para monitorización, dashboards y orquestadores (Docker, Kubernetes).
+English | [Español](README.es.md)
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## Features
+
+- **Pure Go Standard Library**: No external third-party dependencies in `go.mod`. The entire runtime stack (HTTP server, WebSocket client, YAML parser, JSON serializer, rate limiters, and OAuth flow) uses solely the Go standard library.
+- **Persistent Social Relationship Engine**:
+  - Individual affinity score tracking bounded from `-100` to `+100` per viewer.
+  - Dynamic relationship tiers modifying tone, familiarity, and decision boundaries.
+  - Earned titles awarded dynamically based on cumulative conversational context.
+  - Episodic memory tracking viewer facts (configurable default: 15 items, FIFO eviction, deduplication).
+  - Multi-turn conversation memory retaining recent dialogue exchanges per participant.
+- **Competitive Social Slots**:
+  - Limited-capacity honorary positions (e.g., Best Friend, Nemesis, Right Hand).
+  - Deterministic qualification and automatic revocation based on threshold boundaries.
+  - Outrank stealing mechanics enabling higher-affinity viewers to displace incumbents.
+- **Hot-Swappable YAML Personas**:
+  - Declarative configuration files located in the `personas/` directory.
+  - Dynamic runtime switching via chat commands (`!bot persona <id>`) with zero process restarts.
+  - Production presets provided:
+    - `cohost_amigos.yaml`: Warm, witty stream co-host.
+    - `rpg_facciones.yaml`: Faction guardian with allegiance and guild ranking mechanics.
+    - `clan_jerarquia.yaml`: Tribal hierarchy with respect-based challenges.
+    - `drama_romance.yaml`: Interactive narrative drama with emotional stakes.
+- **DeepSeek Integration with Prefix Caching & Circuit Breaker**:
+  - Deterministic system prompts structured for DeepSeek context caching to minimize latency and token expenditure.
+  - Three-state circuit breaker (`Closed`, `Open`, `Half-Open`) ensuring failure isolation against upstream outages.
+- **Twitch Native Transport**:
+  - Low-latency bidirectional EventSub communication via WebSocket (`channel.chat.message`).
+  - Terminal-based OAuth 2.0 Device Code Flow (RFC 8628) removing the need for public webhook ingress or local callback listeners.
+  - Threaded replies dispatched through Twitch Helix API.
+- **Safety, Moderation, and Rate Control**:
+  - Strict input sanitization preventing command injection and prompt leakage.
+  - Output filtering disabling Twitch command execution (`/`, `.`), redacting hyperlinks, and censoring blocked terms.
+  - Token-bucket rate limiting across global broadcast intervals and per-viewer cooldowns.
+- **Diagnostics HTTP Gateway**:
+  - Lightweight `/healthz` and `/status` endpoints for health probes, metrics scrapers, and orchestration systems.
+
+---
+
+## Architecture
 
 ```
                       +----------------------------------+
                       |        Twitch Chat Room          |
                       +-----------------+----------------+
                                         |
-                            EventSub WebSocket Frame
+                             EventSub WebSocket Frame
                                         v
 +--------------------------------------------------------------------------------+
 | Orchestrator (internal/engine)                                                 |
 |                                                                                |
-|   1. Filtro de mensajes propios y vacíos                                       |
-|   2. Detección de disparador (!bot, @BotName, @BotLogin)                       |
-|        ├── NO Disparado ──> Buffer de Sala (internal/room) [Contexto Ambiental]|
-|        └── DISPARADO                                                           |
-|             ├── Comando Admin (Broadcaster / Mod) ──> Ejecución Determinista   |
-|             └── Mensaje Conversacional:                                        |
-|                  ├── Limitador de Cooldowns (internal/ratelimit)               |
-|                  ├── Filtro de Seguridad (internal/safety)                     |
-|                  ├── Carga de Perfil & Puestos (internal/store)                |
-|                  ├── Prompt Caching + Inferencia (internal/llm)                |
-|                  ├── Transición Social Determinista (internal/social)          |
-|                  ├── Persistencia Atómica (internal/store)                     |
-|                  └── Respuesta a Twitch Chat (internal/twitch)                 |
+|   1. Self-message filter and empty payload rejection                           |
+|   2. Trigger prefix detection (!bot, @BotName, @BotLogin)                      |
+|        +-- NO TRIGGER --> Ambient Room Buffer (internal/room)                  |
+|        `-- TRIGGERED                                                           |
+|             +-- Admin Command (Broadcaster/Moderator) -> Deterministic Handler |
+|             `-- Conversational Pipeline:                                       |
+|                  +-- Rate Limiter Check (internal/ratelimit)                   |
+|                  +-- Safety Guardrail Inspection (internal/safety)             |
+|                  +-- Profile & Social Slots Load (internal/store)              |
+|                  +-- Context Cache Prompt Construction (internal/llm)          |
+|                  +-- Upstream LLM Inference (DeepSeek)                         |
+|                  +-- Social Transition State Machine (internal/social)         |
+|                  +-- Atomic Disk Flush (internal/store)                        |
+|                  `-- Threaded Chat Reply (internal/twitch)                     |
 +--------------------------------------------------------------------------------+
         |                                                                |
         v                                                                v
 +-----------------------+                                      +-----------------+
-| Pasarela HTTP         |                                      | Archivos YAML   |
-| (/healthz, /status)   |                                      | de Personalidad |
+| HTTP Gateway          |                                      | YAML Persona    |
+| (/healthz, /status)   |                                      | Definitions     |
 +-----------------------+                                      +-----------------+
 ```
 
 ---
 
-## 💬 Comandos en el Chat de Twitch
+## Chat Commands
 
-### Para Todos los Espectadores
-- `!bot <mensaje>` o `@LunaBot <mensaje>`: Envía una consulta o interactúa con el bot. Consume el cooldown por usuario y evalúa la afinidad según la conversación.
+### Public Commands
+- `!bot <message>` or `@BotName <message>`: Interacts with the active persona. Evaluates affinity deltas, records episodic memories, and consumes user cooldown allowances.
 
-### Comandos Administrativos (Solo Broadcaster y Moderadores)
-Bypasean los cooldowns y se ejecutan de manera determinista:
+### Moderation & Administrative Commands
+Restricted to Broadcaster and Channel Moderators. These commands bypass conversational rate limits and execute deterministically:
 
-| Comando | Descripción |
-|---|---|
-| `!bot pause` | Pausa temporalmente las respuestas conversacionales del bot. |
-| `!bot resume` | Reanuda el procesamiento de mensajes conversacionales. |
-| `!bot status` | Muestra en el chat el estado actual, personalidad activa y titulares de puestos sociales. |
-| `!bot persona <id>` | Cambia y recarga en caliente la personalidad activa (ej. `!bot persona rpg_facciones`). |
-| `!bot set @usuario <afinidad>` | Asigna manualmente un puntaje de afinidad (`-100` a `100`), actualizando su nivel y puestos sociales. |
-| `!bot reset @usuario` | Restablece por completo la memoria social y el cooldown del espectador indicado. |
+| Command | Arguments | Description |
+|---|---|---|
+| `!bot pause` | None | Temporarily suspends conversational replies. |
+| `!bot resume` | None | Resumes standard conversational processing. |
+| `!bot status` | None | Reports active persona, runtime health, and slot holders to chat. |
+| `!bot persona` | `<persona_id>` | Hot-swaps the operational personality (e.g., `!bot persona rpg_facciones`). |
+| `!bot set` | `@user <affinity>` | Overrides viewer affinity score (`-100` to `+100`), recomputing tier and slot assignments. |
+| `!bot reset` | `@user` | Purges episodic memory, resets affinity to baseline, and clears active cooldowns for the target user. |
 
 ---
 
-## 🚀 Guía de Inicio Rápido
+## Quickstart
 
-### Requisitos Previos
-- **Go 1.22+** instalado (desarrollado y probado con Go 1.24).
-- Una clave de API de **DeepSeek** ([DeepSeek Platform](https://platform.deepseek.com/)).
-- Una cuenta y aplicación de **Twitch** registrada en la [Consola de Desarrolladores de Twitch](https://dev.twitch.tv/console) para obtener tu `Client ID`.
+### Prerequisites
+- **Go 1.22+** (compiled and tested with Go 1.24).
+- A valid **DeepSeek API Key** ([DeepSeek Platform](https://platform.deepseek.com/)).
+- A registered **Twitch Application** on the [Twitch Developer Console](https://dev.twitch.tv/console) to obtain a `Client ID`.
 
-### 1. Clonar y Configurar
+### 1. Installation
 ```bash
-git clone https://github.com/twitch-social-bot/twitch-social-bot.git
+git clone https://github.com/RAgredaIpar/twitch-social-bot.git
 cd twitch-social-bot
 cp .env.example .env
 ```
 
-Edita `.env` con tus credenciales:
+Configure `.env` with your deployment values:
 ```ini
-LLM_API_KEY=sk-tu-api-key-de-deepseek
-TWITCH_CLIENT_ID=tu_twitch_client_id
-TWITCH_BROADCASTER_LOGIN=nombre_del_streamer
-TWITCH_BOT_LOGIN=nombre_del_bot
+LLM_API_KEY=sk-your-deepseek-api-key
+TWITCH_CLIENT_ID=your_twitch_client_id
+TWITCH_BROADCASTER_LOGIN=channel_broadcaster_username
+TWITCH_BOT_LOGIN=bot_account_username
 ```
 
-### 2. Ejecutar con Go
+### 2. Execution
 ```bash
 go run ./cmd/bot
 ```
 
-> **Primera Ejecución**: Si no proporcionas `TWITCH_ACCESS_TOKEN`, la consola mostrará un enlace y un código de verificación:
-> ```
-> =================================================================
-> ¡AUTORIZACIÓN DE TWITCH REQUERIDA!
-> Visita: https://www.twitch.tv/activate
-> Código: WXYZ-1234
-> =================================================================
-> ```
-> Abre la URL en tu navegador, inicia sesión con la cuenta del bot y autoriza la aplicación. El bot guardará los tokens en `.tokens.json` y los renovará automáticamente.
+On initial launch without pre-existing tokens, the terminal initiates the OAuth 2.0 Device Code Flow:
+```text
+=================================================================
+TWITCH AUTHORIZATION REQUIRED
+Visit: https://www.twitch.tv/activate
+Code: WXYZ-1234
+=================================================================
+```
+Open the URL in a browser authenticated as the bot user, enter the verification code, and grant authorization. Refresh tokens are automatically written to `.tokens.json` (git-ignored) and renewed periodically.
 
 ---
 
-## 🐳 Despliegue con Docker
+## Container Deployment
 
-El proyecto incluye un `Dockerfile` multi-etapa que compila un binario estático ligero en Alpine Linux:
+A multi-stage Docker build is available producing a minimal, rootless static binary:
 
-### Compilación y Ejecución
 ```bash
-# Construir la imagen
+# Build container image
 make docker-build
 
-# Ejecutar el contenedor con variables de entorno y volumen persistente
-make docker-run
-```
-
-O directamente con Docker CLI:
-```bash
+# Run container with volume persistence
 docker run -d \
   --name twitch-social-bot \
   --restart unless-stopped \
@@ -164,50 +160,51 @@ docker run -d \
 
 ---
 
-## 🛠️ Comandos de Desarrollo (`Makefile`)
+## Make Targets
 
 ```bash
-make test          # Ejecuta la suite de pruebas completa con detector de carreras (-race)
-make test-coverage # Ejecuta pruebas y genera reporte de cobertura de código
-make build         # Compila el binario ejecutable en bin/bot
-make run           # Ejecuta el bot en entorno local
-make clean         # Limpia binarios y archivos de cobertura temporales
-make fmt           # Aplica formato estándar a todos los archivos Go
+make test          # Executes test suite with race detector enabled (-race)
+make test-coverage # Generates test execution profile and coverage report
+make build         # Compiles static executable binary to bin/bot
+make run           # Executes application locally
+make clean         # Removes generated binaries, test artifacts, and coverage profiles
+make fmt           # Runs gofmt across all repository packages
 ```
 
 ---
 
-## ⚙️ Variables de Entorno
+## Configuration Reference
 
-| Variable | Tipo | Por Defecto | Descripción |
+| Variable | Type | Default | Description |
 |---|---|---|---|
-| `LLM_API_KEY` | String | *(Requerido)* | Clave de autenticación para la API de DeepSeek. |
-| `LLM_BASE_URL` | String | `https://api.deepseek.com` | Endpoint base del proveedor de LLM. |
-| `LLM_MODEL` | String | `deepseek-flash` | Modelo de lenguaje a utilizar. |
-| `LLM_TIMEOUT_MS` | Entero | `8000` | Tiempo de espera máximo para peticiones LLM en milisegundos. |
-| `TWITCH_CLIENT_ID` | String | `""` | Client ID de la aplicación en Twitch Developer Console. |
-| `TWITCH_BROADCASTER_LOGIN`| String | `""` | Nombre de usuario del canal emisor. |
-| `TWITCH_BOT_LOGIN` | String | `""` | Nombre de usuario de la cuenta del bot. |
-| `TWITCH_ACCESS_TOKEN` | String | `""` | Token de acceso OAuth inicial (opcional). |
-| `TWITCH_REFRESH_TOKEN` | String | `""` | Token de actualización OAuth inicial (opcional). |
-| `TWITCH_TOKEN_FILE` | String | `.tokens.json` | Ruta local donde se almacenan los tokens OAuth cifrados. |
-| `PERSONA_DIR` | String | `personas` | Directorio de definición de personalidades YAML. |
-| `PERSONA_FILE` | String | `personas/cohost_amigos.yaml` | Personalidad cargada por defecto al arrancar. |
-| `STORE_PATH` | String | `data/social.db` | Ruta del archivo de persistencia atómica en disco. |
-| `GLOBAL_COOLDOWN_MS` | Entero | `3000` | Cooldown global entre mensajes en milisegundos. |
-| `USER_COOLDOWN_MS` | Entero | `15000` | Cooldown por espectador individual en milisegundos. |
-| `ROOM_BUFFER_SIZE` | Entero | `25` | Cantidad de mensajes ambientales recientes en memoria. |
-| `ROOM_BUFFER_MAX_AGE_SEC` | Entero | `600` | Antigüedad máxima de los mensajes en el buffer (segundos). |
-| `HTTP_ADDR` | String | `127.0.0.1:8080` | Dirección y puerto para la pasarela HTTP de diagnóstico. |
+| `LLM_API_KEY` | String | *(Required)* | DeepSeek API authentication key. |
+| `LLM_BASE_URL` | String | `https://api.deepseek.com` | Base endpoint URL for LLM completions. |
+| `LLM_MODEL` | String | `deepseek-flash` | Identifier of model utilized for conversational generation. |
+| `LLM_TIMEOUT_MS` | Integer | `8000` | Upstream LLM request timeout in milliseconds. |
+| `TWITCH_CLIENT_ID` | String | `""` | Registered Twitch Developer Application Client ID. |
+| `TWITCH_BROADCASTER_LOGIN`| String | `""` | Twitch username of the broadcaster channel. |
+| `TWITCH_BOT_LOGIN` | String | `""` | Twitch username representing the chat bot account. |
+| `TWITCH_ACCESS_TOKEN` | String | `""` | Initial OAuth access token override (optional). |
+| `TWITCH_REFRESH_TOKEN` | String | `""` | Initial OAuth refresh token override (optional). |
+| `TWITCH_TOKEN_FILE` | String | `.tokens.json` | Local filepath for encrypted persistence of OAuth tokens. |
+| `PERSONA_DIR` | String | `personas` | Directory containing declarative YAML persona definitions. |
+| `PERSONA_FILE` | String | `personas/cohost_amigos.yaml` | Initial YAML persona loaded at startup. |
+| `STORE_PATH` | String | `data/social.db` | Local filesystem path for the atomic JSON social database. |
+| `GLOBAL_COOLDOWN_MS` | Integer | `3000` | Global broadcast cooldown between bot messages in milliseconds. |
+| `USER_COOLDOWN_MS` | Integer | `15000` | Per-viewer rate limit cooldown in milliseconds. |
+| `ROOM_BUFFER_SIZE` | Integer | `25` | Maximum sliding window capacity of ambient chat messages retained. |
+| `MAX_VIEWER_FACTS` | Integer | `15` | Default maximum quantity of episodic facts stored per viewer. |
+| `ROOM_BUFFER_MAX_AGE_SEC` | Integer | `600` | Maximum age in seconds before ambient chat messages expire. |
+| `HTTP_ADDR` | String | `127.0.0.1:8080` | Network address and port for the diagnostics HTTP gateway. |
 
 ---
 
-## 📊 Endpoints de Diagnóstico HTTP
+## Diagnostic Endpoints
 
-El servidor expone dos endpoints REST ligeros en formato JSON:
+The internal HTTP server exposes monitoring routes:
 
 ### `GET /healthz`
-Comprobación de operatividad para Docker Healthcheck o sondas de Kubernetes.
+Healthcheck probe for orchestrators and container engines:
 ```json
 {
   "status": "ok"
@@ -215,7 +212,7 @@ Comprobación de operatividad para Docker Healthcheck o sondas de Kubernetes.
 ```
 
 ### `GET /status`
-Instantánea en tiempo real del estado interno del motor:
+Detailed operational runtime state:
 ```json
 {
   "paused": false,
@@ -228,7 +225,7 @@ Instantánea en tiempo real del estado interno del motor:
       {
         "slot_id": "bff",
         "user_id": "12345678",
-        "display_name": "ViewerFiel",
+        "display_name": "ViewerOne",
         "affinity": 85,
         "assigned_at": "2026-11-12T04:30:00Z"
       }
@@ -241,6 +238,6 @@ Instantánea en tiempo real del estado interno del motor:
 
 ---
 
-## 📄 Licencia
+## License
 
-Este proyecto se distribuye bajo la licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+This project is licensed under the terms of the [MIT License](LICENSE).
