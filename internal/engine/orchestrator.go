@@ -443,7 +443,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		blockedWords = spec.BlockedWords
 	}
 	if o.cfg.Guard != nil {
-		safeReply = o.cfg.Guard.SanitizeOutput(decision.Reply, blockedWords)
+		safeReply = o.cfg.Guard.SanitizeReply(decision.Reply, msg.DisplayName, blockedWords)
 	}
 
 	updatedProfile, updatedSlots, _ := o.cfg.Social.ApplyDecision(

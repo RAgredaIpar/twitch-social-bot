@@ -56,6 +56,31 @@ func (g *Guard) SanitizeInput(text string) string {
 	return s
 }
 
+func (g *Guard) SanitizeReply(text, targetUsername string, blockedWords []string) string {
+	cleaned := text
+	target := strings.TrimSpace(strings.TrimPrefix(targetUsername, "@"))
+	if target != "" {
+		// Clean ", @target" or " @target" with optional following punctuation
+		reWithLeadingComma := regexp.MustCompile("(?i)(,\\s*)@" + regexp.QuoteMeta(target) + "([:,\\.]?)")
+		cleaned = reWithLeadingComma.ReplaceAllStringFunc(cleaned, func(match string) string {
+			if strings.HasSuffix(match, ".") || strings.HasSuffix(match, "!") || strings.HasSuffix(match, "?") {
+				return string(match[len(match)-1])
+			}
+			return ""
+		})
+
+		re := regexp.MustCompile("(?i)(^|\\s)@" + regexp.QuoteMeta(target) + "([:,\\.]?)(\\s|$)")
+		cleaned = re.ReplaceAllStringFunc(cleaned, func(match string) string {
+			trimmed := strings.TrimSpace(match)
+			if strings.HasSuffix(trimmed, ".") || strings.HasSuffix(trimmed, "!") || strings.HasSuffix(trimmed, "?") {
+				return string(trimmed[len(trimmed)-1]) + " "
+			}
+			return " "
+		})
+	}
+	return g.SanitizeOutput(cleaned, blockedWords)
+}
+
 func (g *Guard) SanitizeOutput(text string, blockedWords []string) string {
 	var b strings.Builder
 	for _, r := range text {

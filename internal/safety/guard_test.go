@@ -165,6 +165,57 @@ func TestSanitizeOutput_URLRedaction(t *testing.T) {
 	}
 }
 
+func TestSanitizeOutput_RemoveRedundantTargetMention(t *testing.T) {
+	g := safety.NewGuard(400, 480)
+
+	tests := []struct {
+		name     string
+		input    string
+		target   string
+		expected string
+	}{
+		{
+			name:     "mention at end with punctuation",
+			input:    "Disculpa aceptada, pero el vocabulario deja que desear, @rhfjfgzrdg. Baja el tono.",
+			target:   "rhfjfgzrdg",
+			expected: "Disculpa aceptada, pero el vocabulario deja que desear. Baja el tono.",
+		},
+		{
+			name:     "mention at beginning",
+			input:    "@Rhfjfgzrdg hola! Todo bien por acá.",
+			target:   "rhfjfgzrdg",
+			expected: "hola! Todo bien por acá.",
+		},
+		{
+			name:     "mention at beginning with colon",
+			input:    "@rhfjfgzrdg: gracias por pasarte.",
+			target:   "rhfjfgzrdg",
+			expected: "gracias por pasarte.",
+		},
+		{
+			name:     "mention at end",
+			input:    "Nos vemos pronto @rhfjfgzrdg",
+			target:   "rhfjfgzrdg",
+			expected: "Nos vemos pronto",
+		},
+		{
+			name:     "different user mention is kept",
+			input:    "Pregúntale a @otro_streamer sobre eso.",
+			target:   "rhfjfgzrdg",
+			expected: "Pregúntale a @otro_streamer sobre eso.",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := g.SanitizeReply(tc.input, tc.target, nil)
+			if got != tc.expected {
+				t.Fatalf("expected %q, got %q", tc.expected, got)
+			}
+		})
+	}
+}
+
 func TestSanitizeOutput_BlockedWords(t *testing.T) {
 	g := safety.NewGuard(400, 480)
 	blocked := []string{"toxicidad_extrema", "tonto", "insulto grave"}
