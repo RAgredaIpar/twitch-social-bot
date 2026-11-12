@@ -296,13 +296,15 @@ func defaultEnglishBundle() *Bundle {
 			"cli_onboard_step1_title":     "Step 1/4: DeepSeek API Key",
 			"cli_onboard_step1_guide":     "Get your API key at: https://platform.deepseek.com/api_keys",
 			"cli_onboard_step2_title":     "Step 2/4: Twitch Developer Application (Client ID)",
-			"cli_onboard_step2_guide":     "1. Go to https://dev.twitch.tv/console  2. Click 'Register Your Application'  3. Redirect URL: http://localhost:3000 | Category: Chat Bot | Type: Confidential  4. Copy the Client ID (or leave blank for Local Simulation mode).",
+			"cli_onboard_step2_guide":     "1. Sign in at https://dev.twitch.tv/console with ANY Twitch account (your main account is fine).\n  2. Click 'Register Your Application' | Redirect URL: http://localhost:3000 | Category: Chat Bot | Type: Confidential\n  3. Copy the Client ID (or leave blank for Local Simulation mode).",
 			"cli_onboard_step3_title":     "Step 3/4: Your Twitch Channel & Bot Account",
 			"cli_onboard_bot_mode_prompt": "Which Twitch account will the bot use to talk in chat?",
 			"cli_onboard_bot_dedicated":   "Dedicated bot account (Recommended: create a second account and /mod it)",
 			"cli_onboard_bot_same":        "My own streamer account (Quickest, no extra account needed)",
 			"cli_onboard_step4_title":     "Step 4/4: Choose Default Persona",
 			"cli_onboard_done":            "Setup complete! Your .env file is saved and ready.",
+			"cli_onboard_oauth_dedicated": "Next step when starting the bot:\n  • The bot will print a code and link (https://www.twitch.tv/activate).\n  • IMPORTANT: Open that link signed into the BOT's Twitch account (%s), NOT your streamer account.\n  • Authorize it there so the bot speaks as %s.\n  • In your channel (%s), run /mod %s in chat.",
+			"cli_onboard_oauth_same":      "Next step when starting the bot:\n  • The bot will print a code and link (https://www.twitch.tv/activate).\n  • Open that link signed into your account (%s) and authorize it.",
 		},
 	}
 }
@@ -382,13 +384,15 @@ func defaultSpanishBundle() *Bundle {
 			"cli_onboard_step1_title":     "Paso 1/4: API Key de DeepSeek",
 			"cli_onboard_step1_guide":     "Consigue tu clave en: https://platform.deepseek.com/api_keys",
 			"cli_onboard_step2_title":     "Paso 2/4: Aplicación de Twitch (Client ID)",
-			"cli_onboard_step2_guide":     "1. Entra a https://dev.twitch.tv/console  2. Clic en 'Register Your Application'  3. Redirect URL: http://localhost:3000 | Category: Chat Bot | Type: Confidential  4. Copia el Client ID (o déjalo vacío para Simulación Local).",
+			"cli_onboard_step2_guide":     "1. Entra a https://dev.twitch.tv/console con CUALQUIER cuenta de Twitch (puede ser tu cuenta principal).\n  2. Clic en 'Register Your Application' | Redirect URL: http://localhost:3000 | Category: Chat Bot | Type: Confidential\n  3. Copia el Client ID (o déjalo vacío para Simulación Local).",
 			"cli_onboard_step3_title":     "Paso 3/4: Tu Canal de Twitch y Cuenta del Bot",
 			"cli_onboard_bot_mode_prompt": "¿Qué cuenta de Twitch usará el bot para escribir en el chat?",
 			"cli_onboard_bot_dedicated":   "Cuenta dedicada para el bot (Recomendado: crea una cuenta aparte y dale /mod)",
 			"cli_onboard_bot_same":        "Mi propia cuenta de streamer (Más rápido, sin crear cuenta nueva)",
 			"cli_onboard_step4_title":     "Paso 4/4: Elige la Personalidad Inicial",
 			"cli_onboard_done":            "¡Configuración completada! Tu archivo .env quedó guardado y listo.",
+			"cli_onboard_oauth_dedicated": "Siguiente paso al iniciar el bot:\n  • El bot generará un código y un link (https://www.twitch.tv/activate).\n  • IMPORTANTE: Abre ese link con la sesión INICIADA EN LA CUENTA DEL BOT (%s), NO en tu cuenta de streamer.\n  • Acepta los permisos en esa cuenta y el bot responderá como %s.\n  • En tu canal (%s), escribe /mod %s en el chat.",
+			"cli_onboard_oauth_same":      "Siguiente paso al iniciar el bot:\n  • El bot generará un código y un link (https://www.twitch.tv/activate).\n  • Abre ese link con la sesión INICIADA en tu cuenta (%s) y acepta los permisos.",
 		},
 	}
 }

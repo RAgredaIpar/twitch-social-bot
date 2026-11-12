@@ -360,7 +360,18 @@ func runOnboarding(in io.Reader, reader *bufio.Reader, out io.Writer, envPath st
 	}
 
 	fmt.Fprintf(out, "\n  %s✓ %s%s\n", cBold+cGreen, loc.Get("cli_onboard_done"), cReset)
-	fmt.Fprintf(out, "  %s%s%s ", cDim, loc.Get("cli_press_enter"), cReset)
+	if cfg.TwitchClientID != "" {
+		if cfg.TwitchBotLogin != "" && cfg.TwitchBotLogin != cfg.TwitchBroadcasterLogin {
+			fmt.Fprintf(out, "\n  %s%s%s\n", cYellow, fmt.Sprintf(loc.Get("cli_onboard_oauth_dedicated"), cfg.TwitchBotLogin, cfg.TwitchBotLogin, cfg.TwitchBroadcasterLogin, cfg.TwitchBotLogin), cReset)
+		} else {
+			acct := cfg.TwitchBotLogin
+			if acct == "" {
+				acct = cfg.TwitchBroadcasterLogin
+			}
+			fmt.Fprintf(out, "\n  %s%s%s\n", cYellow, fmt.Sprintf(loc.Get("cli_onboard_oauth_same"), acct), cReset)
+		}
+	}
+	fmt.Fprintf(out, "\n  %s%s%s ", cDim, loc.Get("cli_press_enter"), cReset)
 	_, _ = reader.ReadString('\n')
 	return nil
 }
