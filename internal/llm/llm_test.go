@@ -386,6 +386,18 @@ func TestParseLLMDecision(t *testing.T) {
 		}
 	})
 
+	t.Run("truncated json extracts reply cleanly", func(t *testing.T) {
+		raw := `{"reply":"¿Israel? Eso suena a debate de sobremesa que no pienso tocar en stream, @rhfjfgzrdg. Pregunta algo que no requiera un panel de expertos y seguimos.","affinity_delta":0,"new_title":"","new_fact":"","slot_claim":""`
+		dec, err := llm.ParseLLMDecision(raw)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := "¿Israel? Eso suena a debate de sobremesa que no pienso tocar en stream, @rhfjfgzrdg. Pregunta algo que no requiera un panel de expertos y seguimos."
+		if dec.Reply != expected {
+			t.Fatalf("expected extracted reply %q, got %q", expected, dec.Reply)
+		}
+	})
+
 	t.Run("empty string returns error", func(t *testing.T) {
 		_, err := llm.ParseLLMDecision("   \n\t  ")
 		if err == nil {

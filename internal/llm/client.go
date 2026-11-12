@@ -48,7 +48,7 @@ func NewClient(cfg ClientConfig, clock domain.Clock) *Client {
 		cfg.Timeout = 8 * time.Second
 	}
 	if cfg.MaxTokens <= 0 {
-		cfg.MaxTokens = 260
+		cfg.MaxTokens = 450
 	}
 	if cfg.Temperature <= 0 {
 		cfg.Temperature = 0.7
@@ -227,6 +227,58 @@ func ParseLLMDecision(raw string) (domain.LLMDecision, error) {
 				Reply:         trimmed,
 				AffinityDelta: 0,
 			}, nil
+		}
+	}
+
+	// Truncated or malformed JSON recovery: if the output starts like JSON with a "reply" field
+	if strings.Contains(cleaned, `"reply"`) {
+		replyKey := `"reply"`
+		idx := strings.Index(cleaned, replyKey)
+		if idx != -1 {
+			rem := cleaned[idx+len(replyKey):]
+			colonIdx := strings.Index(rem, ":")
+			if colonIdx != -1 {
+				valPart := strings.TrimSpace(rem[colonIdx+1:])
+				if strings.HasPrefix(valPart, `"`) {
+					valPart = valPart[1:]
+					var sb strings.Builder
+					escaped := false
+					foundClosing := false
+					for _, r := range valPart {
+						if escaped {
+							switch r {
+							case 'n':
+								sb.WriteRune('\n')
+							case 'r':
+								sb.WriteRune('\r')
+							case 't':
+								sb.WriteRune('\t')
+							case '"':
+								sb.WriteRune('"')
+							case '\\':
+								sb.WriteRune('\\')
+							default:
+								sb.WriteRune(r)
+							}
+							escaped = false
+						} else if r == '\\' {
+							escaped = true
+						} else if r == '"' {
+							foundClosing = true
+							break
+						} else {
+							sb.WriteRune(r)
+						}
+					}
+					extractedReply := strings.TrimSpace(sb.String())
+					if foundClosing && extractedReply != "" {
+						return domain.LLMDecision{
+							Reply:         extractedReply,
+							AffinityDelta: 0,
+						}, nil
+					}
+				}
+			}
 		}
 	}
 
