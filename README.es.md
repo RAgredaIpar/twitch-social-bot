@@ -23,6 +23,7 @@ Desarrollado en Go puro (100% biblioteca estándar, cero dependencias externas, 
   - Mecánica de usurpación de puestos (*outrank stealing*) que permite a espectadores con mayor afinidad desplazar a los ocupantes actuales.
 - **Personalidades YAML Intercambiables en Caliente**:
   - Archivos de configuración declarativos ubicados en el directorio `personas/`.
+  - Catálogo detallado y guía para autores: [docs/personas.es.md](docs/personas.es.md) ([English](docs/personas.md)).
   - Cambio en tiempo de ejecución mediante comandos de chat (`!bot persona <id>`) sin reiniciar el proceso.
   - Plantillas de producción incluidas:
     - `cohost_amigos.yaml`: Co-host de transmisión cálida y divertida.
