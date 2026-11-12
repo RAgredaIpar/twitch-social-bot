@@ -11,6 +11,8 @@ import (
 )
 
 type Config struct {
+	BotLanguage            string        `json:"bot_language"`
+	LocaleDir              string        `json:"locale_dir"`
 	LLMAPIKey              string        `json:"llm_api_key"`
 	LLMBaseURL             string        `json:"llm_base_url"`
 	LLMModel               string        `json:"llm_model"`
@@ -35,6 +37,19 @@ type Config struct {
 // Load loads configuration from environment variables and an optional .env file.
 // Values in os.Environ take precedence over values in the .env file.
 func Load(envFile string) (*Config, error) {
+	cfg, err := LoadRaw(envFile)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.LLMAPIKey == "" {
+		return nil, errors.New("LLM_API_KEY is required and cannot be empty")
+	}
+	return cfg, nil
+}
+
+// LoadRaw loads configuration without enforcing required runtime secrets like LLM_API_KEY.
+// Useful for interactive CLI startup and the .env setup wizard.
+func LoadRaw(envFile string) (*Config, error) {
 	fileEnv := make(map[string]string)
 	if envFile != "" {
 		if _, err := os.Stat(envFile); err == nil {
@@ -57,6 +72,8 @@ func Load(envFile string) (*Config, error) {
 	}
 
 	cfg := &Config{
+		BotLanguage:            strings.ToLower(get("BOT_LANGUAGE", "en")),
+		LocaleDir:              get("LOCALE_DIR", "locales"),
 		LLMAPIKey:              get("LLM_API_KEY", ""),
 		LLMBaseURL:             get("LLM_BASE_URL", "https://api.deepseek.com"),
 		LLMModel:               get("LLM_MODEL", "deepseek-flash"),
@@ -122,9 +139,6 @@ func Load(envFile string) (*Config, error) {
 		return nil, fmt.Errorf("invalid ROOM_BUFFER_MAX_AGE_SEC value: %q", rmaStr)
 	}
 
-	if cfg.LLMAPIKey == "" {
-		return nil, errors.New("LLM_API_KEY is required and cannot be empty")
-	}
 	if cfg.GlobalCooldown < 0 {
 		return nil, fmt.Errorf("GLOBAL_COOLDOWN_MS must be >= 0, got %v", cfg.GlobalCooldown)
 	}
@@ -172,4 +186,44 @@ func parseEnvFile(path string) (map[string]string, error) {
 		return nil, err
 	}
 	return env, nil
+}
+
+// SaveEnv writes the configuration to an .env file in a clean, human-readable layout.
+func SaveEnv(path string, cfg *Config) error {
+	if cfg == nil {
+		return errors.New("config cannot be nil")
+	}
+	var b strings.Builder
+	b.WriteString("# Language & Localization\n")
+	b.WriteString(fmt.Sprintf("BOT_LANGUAGE=%s\n", cfg.BotLanguage))
+	b.WriteString(fmt.Sprintf("LOCALE_DIR=%s\n\n", cfg.LocaleDir))
+
+	b.WriteString("# DeepSeek / OpenAI-Compatible LLM\n")
+	b.WriteString(fmt.Sprintf("LLM_API_KEY=%s\n", cfg.LLMAPIKey))
+	b.WriteString(fmt.Sprintf("LLM_BASE_URL=%s\n", cfg.LLMBaseURL))
+	b.WriteString(fmt.Sprintf("LLM_MODEL=%s\n", cfg.LLMModel))
+	b.WriteString(fmt.Sprintf("LLM_TIMEOUT_MS=%d\n\n", cfg.LLMTimeout.Milliseconds()))
+
+	b.WriteString("# Twitch Credentials & Accounts\n")
+	b.WriteString(fmt.Sprintf("TWITCH_CLIENT_ID=%s\n", cfg.TwitchClientID))
+	b.WriteString(fmt.Sprintf("TWITCH_BROADCASTER_LOGIN=%s\n", cfg.TwitchBroadcasterLogin))
+	b.WriteString(fmt.Sprintf("TWITCH_BOT_LOGIN=%s\n", cfg.TwitchBotLogin))
+	b.WriteString(fmt.Sprintf("TWITCH_ACCESS_TOKEN=%s\n", cfg.TwitchAccessToken))
+	b.WriteString(fmt.Sprintf("TWITCH_REFRESH_TOKEN=%s\n", cfg.TwitchRefreshToken))
+	b.WriteString(fmt.Sprintf("TWITCH_TOKEN_FILE=%s\n\n", cfg.TokenFile))
+
+	b.WriteString("# Personas & Persistence\n")
+	b.WriteString(fmt.Sprintf("PERSONA_DIR=%s\n", cfg.PersonaDir))
+	b.WriteString(fmt.Sprintf("PERSONA_FILE=%s\n", cfg.PersonaFile))
+	b.WriteString(fmt.Sprintf("STORE_PATH=%s\n\n", cfg.StorePath))
+
+	b.WriteString("# Rate Limiting, Memory & Diagnostics\n")
+	b.WriteString(fmt.Sprintf("GLOBAL_COOLDOWN_MS=%d\n", cfg.GlobalCooldown.Milliseconds()))
+	b.WriteString(fmt.Sprintf("USER_COOLDOWN_MS=%d\n", cfg.UserCooldown.Milliseconds()))
+	b.WriteString(fmt.Sprintf("ROOM_BUFFER_SIZE=%d\n", cfg.RoomBufferSize))
+	b.WriteString(fmt.Sprintf("MAX_VIEWER_FACTS=%d\n", cfg.MaxViewerFacts))
+	b.WriteString(fmt.Sprintf("ROOM_BUFFER_MAX_AGE_SEC=%d\n", int(cfg.RoomBufferMaxAge.Seconds())))
+	b.WriteString(fmt.Sprintf("HTTP_ADDR=%s\n", cfg.HTTPAddr))
+
+	return os.WriteFile(path, []byte(b.String()), 0600)
 }

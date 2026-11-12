@@ -31,6 +31,7 @@ RUN mkdir -p /app/data && chown -R botuser:botgroup /app
 # Copiar binario compilado y personalidades
 COPY --from=builder /build/bot /app/bot
 COPY personas /app/personas
+COPY locales /app/locales
 
 USER botuser
 
@@ -41,4 +42,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 
-ENTRYPOINT ["/app/bot"]
+ENTRYPOINT ["/app/bot", "--run"]

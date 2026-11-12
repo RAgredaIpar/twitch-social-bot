@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/twitch-social-bot/internal/domain"
+	"github.com/twitch-social-bot/internal/i18n"
 	"github.com/twitch-social-bot/internal/ratelimit"
 	"github.com/twitch-social-bot/internal/room"
 	"github.com/twitch-social-bot/internal/safety"
@@ -42,6 +43,7 @@ type OrchestratorConfig struct {
 	Room      *room.Buffer
 	Social    *social.Engine
 	Guard     *safety.Guard
+	Locale    *i18n.Manager
 }
 
 // Orchestrator coordinates chat messaging, rate limiting, room buffer,
@@ -52,6 +54,7 @@ type Orchestrator struct {
 	processedMessages int64
 	generatedReplies  int64
 	cfg               OrchestratorConfig
+	loc               *i18n.Manager
 }
 
 // NewOrchestrator creates a new conversational orchestrator.
@@ -59,8 +62,13 @@ func NewOrchestrator(cfg OrchestratorConfig) *Orchestrator {
 	if cfg.Clock == nil {
 		cfg.Clock = domain.NewRealClock()
 	}
+	loc := cfg.Locale
+	if loc == nil {
+		loc, _ = i18n.NewManager("", "es")
+	}
 	return &Orchestrator{
 		cfg: cfg,
+		loc: loc,
 	}
 }
 
@@ -175,7 +183,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "pause":
 			o.SetPaused(true)
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, "Bot pausado.")
+				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_paused"))
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
@@ -183,15 +191,15 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "resume":
 			o.SetPaused(false)
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, "Bot reanudado.")
+				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_resumed"))
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
 
 		case "status":
-			stateStr := "activo"
+			stateStr := strings.ToLower(o.loc.Get("bot_state_active"))
 			if o.IsPaused() {
-				stateStr = "pausado"
+				stateStr = strings.ToLower(o.loc.Get("bot_state_paused"))
 			}
 			activeName := ""
 			if spec != nil {
@@ -208,11 +216,11 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 					}
 				}
 			}
-			puestosStr := "ninguno"
+			puestosStr := o.loc.Get("bot_no_slots")
 			if len(slotsSummary) > 0 {
 				puestosStr = strings.Join(slotsSummary, ", ")
 			}
-			reply := fmt.Sprintf("Persona: %s | Estado: %s | Puestos: %s", activeName, stateStr, puestosStr)
+			reply := o.loc.Format("bot_status_fmt", activeName, stateStr, puestosStr)
 			if o.cfg.Sender != nil {
 				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, reply)
 				atomic.AddInt64(&o.generatedReplies, 1)
@@ -222,7 +230,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "persona":
 			if len(fields) < 2 {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, "Uso: !bot persona <id>")
+					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_usage_persona"))
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
@@ -231,13 +239,13 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 			newSpec, err := o.cfg.Persona.Switch(targetPersona)
 			if err != nil {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, "Error al cambiar persona: "+err.Error())
+					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_persona_error")+err.Error())
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
 			}
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, fmt.Sprintf("Persona activada: %s.", newSpec.Name))
+				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Format("bot_persona_activated", newSpec.Name))
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
@@ -245,7 +253,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "set":
 			if len(fields) < 3 {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, "Uso: !bot set @usuario <afinidad>")
+					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_usage_set"))
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
@@ -254,7 +262,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 			score, err := strconv.Atoi(fields[2])
 			if err != nil {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, "Puntuación de afinidad inválida.")
+					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_invalid_affinity"))
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
@@ -313,7 +321,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 				return fmt.Errorf("save profile: %w", err)
 			}
 
-			reply := fmt.Sprintf("Afinidad de %s actualizada a %d (Tier: %s).", updatedProfile.DisplayName, updatedProfile.Affinity, updatedProfile.TierID)
+			reply := o.loc.Format("bot_affinity_updated", updatedProfile.DisplayName, updatedProfile.Affinity, updatedProfile.TierID)
 			if o.cfg.Sender != nil {
 				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, reply)
 				atomic.AddInt64(&o.generatedReplies, 1)
@@ -323,7 +331,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "reset":
 			if len(fields) < 2 {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, "Uso: !bot reset @usuario")
+					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_usage_reset"))
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
@@ -347,7 +355,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 				o.cfg.Limiter.ResetUser(targetUserID)
 			}
 
-			reply := fmt.Sprintf("Perfil de %s restablecido correctamente.", displayName)
+			reply := o.loc.Format("bot_profile_reset", displayName)
 			if o.cfg.Sender != nil {
 				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, reply)
 				atomic.AddInt64(&o.generatedReplies, 1)

@@ -13,9 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/twitch-social-bot/internal/cli"
 	"github.com/twitch-social-bot/internal/config"
 	"github.com/twitch-social-bot/internal/domain"
 	"github.com/twitch-social-bot/internal/engine"
+	"github.com/twitch-social-bot/internal/i18n"
 	"github.com/twitch-social-bot/internal/llm"
 	"github.com/twitch-social-bot/internal/persona"
 	"github.com/twitch-social-bot/internal/ratelimit"
@@ -35,33 +37,56 @@ func (s *stdoutSender) SendReply(ctx context.Context, broadcasterID, senderID, r
 }
 
 func main() {
-	envFile := flag.String("env", ".env", "Ruta al archivo .env de variables de entorno")
+	envFile := flag.String("env", ".env", "Path to .env configuration file")
+	headless := flag.Bool("run", false, "Start bot directly without interactive CLI menu")
 	flag.Parse()
+
+	cli.EnableANSI()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := config.Load(*envFile)
+	cfg, err := config.LoadRaw(*envFile)
 	if err != nil {
-		log.Fatalf("Error cargando configuración: %v", err)
+		log.Fatalf("Error loading configuration: %v", err)
+	}
+
+	loc, err := i18n.NewManager(cfg.LocaleDir, cfg.BotLanguage)
+	if err != nil {
+		log.Printf("Warning: %v; falling back to 'en'", err)
+		loc, _ = i18n.NewManager(cfg.LocaleDir, "en")
+	}
+
+	pm, err := persona.NewManager(cfg.PersonaDir, cfg.PersonaFile)
+	if err != nil {
+		log.Fatalf("Error initializing personas: %v", err)
+	}
+
+	if !*headless && cli.IsInteractiveTTY() {
+		shouldStart, updatedCfg, cliErr := cli.RunInteractive(os.Stdin, os.Stdout, *envFile, cfg, loc, pm)
+		if cliErr != nil {
+			log.Fatalf("CLI error: %v", cliErr)
+		}
+		if !shouldStart {
+			return
+		}
+		cfg = updatedCfg
+	} else if strings.TrimSpace(cfg.LLMAPIKey) == "" {
+		log.Fatalf("LLM_API_KEY is required in headless mode (run without --run for interactive setup)")
 	}
 
 	st, err := store.Open(cfg.StorePath)
 	if err != nil {
-		log.Fatalf("Error abriendo almacén persistente (%s): %v", cfg.StorePath, err)
+		log.Fatalf("Error opening store (%s): %v", cfg.StorePath, err)
 	}
 	defer func() {
 		if err := st.Close(); err != nil {
-			log.Printf("Error cerrando almacén persistente: %v", err)
+			log.Printf("Error closing store: %v", err)
 		}
 	}()
 
-	pm, err := persona.NewManager(cfg.PersonaDir, cfg.PersonaFile)
-	if err != nil {
-		log.Fatalf("Error inicializando personalidades: %v", err)
-	}
 	activePersona := pm.Current()
-	log.Printf("Personalidad activa inicial: %s (%s)", activePersona.Name, activePersona.ID)
+	log.Printf("Active persona: %s [%s] | Language: %s", activePersona.Name, activePersona.BotName, loc.ActiveID())
 
 	clk := domain.NewRealClock()
 	lim := ratelimit.NewCooldownLimiter(clk, cfg.GlobalCooldown, cfg.UserCooldown)
@@ -74,6 +99,7 @@ func main() {
 		APIKey:  cfg.LLMAPIKey,
 		Model:   cfg.LLMModel,
 		Timeout: cfg.LLMTimeout,
+		Locale:  loc,
 	}, clk)
 
 	var sender domain.ChatSender
@@ -152,6 +178,7 @@ func main() {
 		Room:      rm,
 		Social:    soc,
 		Guard:     grd,
+		Locale:    loc,
 	})
 
 	if cfg.HTTPAddr != "" {

@@ -27,10 +27,10 @@ El motor valida el archivo YAML y actualiza la conducta en memoria al instante s
 ## 2. Catálogo de Personalidades Incluidas
 
 ### 1. `cohost_amigos` (Co-Host Amigos)
-- **Nombre del Personaje**: Kiro
+- **Nombre del Personaje**: Mochi
 - **Archivo**: `personas/cohost_amigos.yaml`
 - **Categoría Ideal**: Just Chatting, Variedad, Streams de Comunidad.
-- **Estilo**: Co-host sarcástico, ingenioso y carismático. Compañero de streaming que bromea con el chat con humor seco pero mantiene camaradería con los espectadores recurrentes.
+- **Estilo**: Co-host sarcástica, ingeniosa y carismática. Compañera de streaming que bromea con el chat con humor seco pero mantiene camaradería con los espectadores recurrentes.
 - **Límites de Afinidad**: Positivo: `+5`, Negativo: `-8`.
 - **Niveles (*Tiers*)**:
   - `rival` (-100 a -25): Cortante, sarcasmo pesado, desdén.
@@ -39,36 +39,36 @@ El motor valida el archivo YAML y actualiza la conducta en memoria al instante s
   - `pana` (45 a 74): Gran confianza, humor compartido, apodos amistosos.
   - `favorito` (75 a 100): Lealtad total, defiende al espectador en el chat.
 - **Puestos Sociales**:
-  - `favorito_del_bot` (Cupo: 1, Min: 75): *El Favorito de Kiro*
+  - `favorito_del_bot` (Cupo: 1, Min: 75): *El Favorito de Mochi*
   - `complice` (Cupo: 2, Min: 45): *Cómplice Oficial*
   - `enemigo_publico` (Cupo: 1, Max: -35): *Enemigo Público #1*
 
 ---
 
 ### 2. `rpg_facciones` (RPG Facciones)
-- **Nombre del Personaje**: Guardián Valerius
+- **Nombre del Personaje**: Lyra
 - **Archivo**: `personas/rpg_facciones.yaml`
-- **Categoría Ideal**: MMORPGs, ARPGs, Roguelikes, Juegos de Fantasía Medieval.
-- **Estilo**: Centinela de orden caballeresco solemne que habla con formalidad medieval. Trata a los espectadores como aventureros a prueba, juzgando su valor y disciplina.
-- **Límites de Afinidad**: Positivo: `+4`, Negativo: `-10`.
+- **Categoría Ideal**: MMORPGs, ARPGs, Roguelikes, Juegos de Fantasía.
+- **Estilo**: Guild Master y estratega veterana que ve el chat como una raid en curso. Usa terminología gamer/rolera natural, motiva a su party y frena a los trolls.
+- **Límites de Afinidad**: Positivo: `+5`, Negativo: `-8`.
 - **Niveles (*Tiers*)**:
-  - `hereje` (-100 a -30): Deshonorable, vigilancia hostil.
-  - `forastero` (-29 a 10): Evaluación cautelosa, protocolo rígido.
-  - `escudero` (11 a 40): Reconocimiento y guía en combate.
-  - `caballero` (41 a 70): Compañero de armas leal y respetado.
-  - `heroe_del_reino` (71 a 100): Veneración legendaria, defensor jurado.
+  - `trol_cueva` (-100 a -25): Mob hostil, burlas tácticas.
+  - `npc` (-24 a 14): Aventurero genérico en la taberna.
+  - `aprendiz` (15 a 44): Recluta en entrenamiento.
+  - `raider_veterano` (45 a 74): Compañero de raid de confianza.
+  - `leyenda_gremio` (75 a 100): Héroe legendario del gremio.
 - **Puestos Sociales**:
-  - `campeon_gremial` (Cupo: 1, Min: 70): *Campeón del Gremio*
-  - `mariscal_tactico` (Cupo: 1, Min: 50): *Mariscal Táctico*
-  - `proscrito_reino` (Cupo: 1, Max: -40): *Proscrito del Reino*
+  - `campeon_gremial` (Cupo: 1, Min: 75): *Campeón del Gremio*
+  - `mariscal_tactico` (Cupo: 1, Min: 45): *Mariscal Táctico*
+  - `proscrito_reino` (Cupo: 1, Max: -35): *Proscrito del Reino*
 
 ---
 
 ### 3. `clan_jerarquia` (Clan Jerarquía)
-- **Nombre del Personaje**: Gornak
+- **Nombre del Personaje**: Dante
 - **Archivo**: `personas/clan_jerarquia.yaml`
-- **Categoría Ideal**: FPS Competitivos, Supervivencia, Battle Royales (Rust, Tarkov, Apex).
-- **Estilo**: Caudillo tribal implacable que solo respeta la fuerza, el coraje y la resistencia. No tolera quejas y premia la determinación.
+- **Categoría Ideal**: FPS Competitivos, Supervivencia, Estrategia.
+- **Estilo**: Jefe respetado e imponente de la familia del canal. Mentalidad de sindicato y honor clásico: lealtad, respeto, palabras medidas y jerarquía estricta.
 - **Límites de Afinidad**: Positivo: `+6`, Negativo: `-12`.
 - **Niveles (*Tiers*)**:
   - `escoria` (-100 a -35): Desprecio absoluto y burlas cortas.

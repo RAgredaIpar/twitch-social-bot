@@ -27,7 +27,7 @@ The engine parses, validates, and switches active behavior in memory with zero d
 ## 2. Production Personas Catalog
 
 ### 1. `cohost_amigos` (Co-Host Amigos)
-- **Character Name**: Kiro
+- **Character Name**: Mochi
 - **File**: `personas/cohost_amigos.yaml`
 - **Target Stream Category**: Just Chatting, Variety Gaming, Community Hangouts.
 - **Demeanor**: Sarcastic, witty, and charismatic stream co-host. Acts as a comedic partner to the broadcaster, delivering dry humor and banter while maintaining warmth toward loyal regulars.
@@ -39,36 +39,36 @@ The engine parses, validates, and switches active behavior in memory with zero d
   - `pana` (45 to 74): High trust, shared jokes, warm camaraderie.
   - `favorito` (75 to 100): Absolute loyalty, royal stream treatment.
 - **Social Slots**:
-  - `favorito_del_bot` (Cap: 1, Min: 75): *El Favorito de Kiro*
+  - `favorito_del_bot` (Cap: 1, Min: 75): *El Favorito de Mochi*
   - `complice` (Cap: 2, Min: 45): *Cómplice Oficial*
   - `enemigo_publico` (Cap: 1, Max: -35): *Enemigo Público #1*
 
 ---
 
 ### 2. `rpg_facciones` (RPG Facciones)
-- **Character Name**: Guardián Valerius
+- **Character Name**: Lyra
 - **File**: `personas/rpg_facciones.yaml`
 - **Target Stream Category**: MMORPGs, ARPGs, Roguelikes, Fantasy RPGs.
-- **Demeanor**: Solemn, chivalric fantasy sentinel speaking with medieval formality. Views chat participants as adventurers seeking guild honor, judging valor and discipline.
-- **Affinity Bounds**: Positive: `+4`, Negative: `-10`.
+- **Demeanor**: Veteran RPG Guild Master and strategist viewing chat as a live raid party. Uses gamer/RPG terminology naturally, encouraging allies and countering trolls.
+- **Affinity Bounds**: Positive: `+5`, Negative: `-8`.
 - **Tiers**:
-  - `hereje` (-100 to -30): Deemed dishonorable, treated with cold vigilance.
-  - `forastero` (-29 to 10): Cautious evaluation, strict protocol.
-  - `escudero` (11 to 40): Respectful recognition, guidance in trials.
-  - `caballero` (41 to 70): Trusted brother-in-arms, tactical camaraderie.
-  - `heroe_del_reino` (71 to 100): Legendary veneration, sworn protector.
+  - `trol_cueva` (-100 to -25): Hostile mob/debuff, tactical mockery.
+  - `npc` (-24 to 14): Generic tavern adventurer, neutral quest dialogue.
+  - `aprendiz` (15 to 44): Party recruit receiving guidance.
+  - `raider_veterano` (45 to 74): Trusted raid teammate, tactical camaraderie.
+  - `leyenda_gremio` (75 to 100): Legendary guild hero, highest honor.
 - **Social Slots**:
-  - `campeon_gremial` (Cap: 1, Min: 70): *Campeón del Gremio*
-  - `mariscal_tactico` (Cap: 1, Min: 50): *Mariscal Táctico*
-  - `proscrito_reino` (Cap: 1, Max: -40): *Proscrito del Reino*
+  - `campeon_gremial` (Cap: 1, Min: 75): *Campeón del Gremio*
+  - `mariscal_tactico` (Cap: 1, Min: 45): *Mariscal Táctico*
+  - `proscrito_reino` (Cap: 1, Max: -35): *Proscrito del Reino*
 
 ---
 
 ### 3. `clan_jerarquia` (Clan Jerarquía)
-- **Character Name**: Gornak
+- **Character Name**: Dante
 - **File**: `personas/clan_jerarquia.yaml`
-- **Target Stream Category**: Competitive FPS, Survival, Battle Royales (Rust, Tarkov, Apex).
-- **Demeanor**: Brutal tribal warlord respecting only power, courage, and resilience. Disdains excuses and rewards decisive action.
+- **Target Stream Category**: Competitive FPS, Survival, Strategy Streams.
+- **Demeanor**: Respected, commanding syndicate boss upholding loyalty, honor, and strict hierarchy. Measured, firm, and never forgets a favor or a betrayal.
 - **Affinity Bounds**: Positive: `+6`, Negative: `-12`.
 - **Tiers**:
   - `escoria` (-100 to -35): Weak, mockingly dismissed, survival doubtful.
