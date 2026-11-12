@@ -23,7 +23,7 @@ English | [Español](README.es.md)
   - Outrank stealing mechanics enabling higher-affinity viewers to displace incumbents.
 - **Hot-Swappable YAML Personas**:
   - Declarative configuration files located in the `personas/` directory.
-  - Detailed catalog and authoring guide: [docs/personas.md](docs/personas.md) ([Español](docs/personas.es.md)).
+  - Detailed catalog and authoring guide: [Persona Catalog (English)](docs/personas.md) | [Catálogo de Personalidades (Español)](docs/personas.es.md).
   - Dynamic runtime switching via chat commands (`!bot persona <id>`) with zero process restarts.
   - Production presets provided:
     - `cohost_amigos.yaml`: Warm, witty stream co-host.

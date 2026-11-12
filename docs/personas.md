@@ -1,5 +1,7 @@
 # Declarative YAML Persona Engine
 
+English | [Español](personas.es.md)
+
 This document outlines the architecture, specification standard, and catalog of production personas for **Twitch Social Bot**. It also serves as the canonical authoring guide for adding new custom archetypes to the `personas/` directory in a modular and forward-compatible manner.
 
 ---

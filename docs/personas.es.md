@@ -1,5 +1,7 @@
 # Motor Declarativo de Personalidades YAML
 
+[English](personas.md) | Español
+
 Este documento detalla la arquitectura, el estándar de especificación y el catálogo de personalidades incluidas en **Twitch Social Bot**. Además, funciona como la guía oficial para crear y registrar nuevos arquetipos dentro de la carpeta `personas/` de forma escalable y ordenada.
 
 ---
