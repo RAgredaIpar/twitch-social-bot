@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"sort"
 	"strings"
@@ -26,6 +27,8 @@ type ClientConfig struct {
 	Timeout          time.Duration
 	MaxTokens        int
 	Temperature      float64
+	FrequencyPenalty float64
+	PresencePenalty  float64
 	FailureThreshold int
 	BreakerCooldown  time.Duration
 	HTTPClient       *http.Client
@@ -53,7 +56,13 @@ func NewClient(cfg ClientConfig, clock domain.Clock) *Client {
 		cfg.MaxTokens = 450
 	}
 	if cfg.Temperature <= 0 {
-		cfg.Temperature = 0.7
+		cfg.Temperature = 0.85
+	}
+	if cfg.FrequencyPenalty <= 0 {
+		cfg.FrequencyPenalty = 0.45
+	}
+	if cfg.PresencePenalty <= 0 {
+		cfg.PresencePenalty = 0.35
 	}
 	if cfg.FailureThreshold <= 0 {
 		cfg.FailureThreshold = 5
@@ -132,6 +141,8 @@ func BuildSystemPromptWithLocale(spec *domain.PersonaSpec, loc *i18n.Manager) st
 	b.WriteString(loc.Get("llm_rule_1") + "\n")
 	b.WriteString(loc.Get("llm_rule_2") + "\n")
 	b.WriteString(loc.Get("llm_rule_3") + "\n")
+	b.WriteString(loc.Get("llm_rule_opinion") + "\n")
+	b.WriteString(loc.Get("llm_rule_no_ai") + "\n")
 	b.WriteString(loc.Get("llm_rule_4") + "\n")
 	b.WriteString(`{"reply":"...","affinity_delta":0,"new_title":"","new_fact":"","slot_claim":""}` + "\n")
 
@@ -150,7 +161,21 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	}
 	var b strings.Builder
 
+	if input.StreamGame != "" || input.StreamTitle != "" {
+		b.WriteString(loc.Get("llm_stream_context_header") + "\n")
+		if input.StreamGame != "" {
+			b.WriteString(fmt.Sprintf("- Game/Category: %s\n", input.StreamGame))
+		}
+		if input.StreamTitle != "" {
+			b.WriteString(fmt.Sprintf("- Title: %s\n", input.StreamTitle))
+		}
+		b.WriteString("\n")
+	}
+
 	b.WriteString(loc.Get("llm_user_channel_state") + "\n")
+	if input.CurrentMood != "" {
+		b.WriteString(fmt.Sprintf("- Current Mood: %s\n", loc.Get("llm_mood_"+input.CurrentMood)))
+	}
 	var slotLines []string
 	if len(input.ActiveSlots) > 0 {
 		var slotIDs []string
@@ -186,6 +211,9 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 
 	b.WriteString(loc.Get("llm_user_viewer_profile") + "\n")
 	b.WriteString(fmt.Sprintf("- Viewer: %s (@%s)\n", input.Profile.DisplayName, input.Profile.Username))
+	if input.ViewerRole != "" {
+		b.WriteString(fmt.Sprintf("- Role: %s\n", loc.Get("llm_role_"+input.ViewerRole)))
+	}
 	b.WriteString(fmt.Sprintf("- Affinity: %d\n", input.Profile.Affinity))
 	b.WriteString(fmt.Sprintf("- Tier: %s (%s)\n", input.CurrentTier.Name, input.CurrentTier.ID))
 	b.WriteString(fmt.Sprintf("- Behavior: %s\n", input.CurrentTier.Behavior))
@@ -209,11 +237,45 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	}
 	b.WriteString("\n")
 
+	pacingKey, isMinimal := pickTurnPacingKey(input.ViewerMessage)
+	b.WriteString(loc.Get(pacingKey) + "\n")
+	b.WriteString(loc.Get("llm_anti_repeat") + "\n")
+	if len(input.RecentRoom) > 0 {
+		b.WriteString(loc.Get("llm_cross_memory") + "\n")
+	}
+	if !isMinimal && rand.IntN(100) < 25 {
+		b.WriteString(loc.Get("llm_follow_up_hint") + "\n")
+	}
+	b.WriteString("\n")
+
 	b.WriteString(loc.Get("llm_user_untrusted_msg") + "\n")
 	b.WriteString(input.ViewerMessage)
 	b.WriteString("\n")
 
 	return b.String()
+}
+
+func isMinimalMessage(msg string) bool {
+	trimmed := strings.TrimSpace(msg)
+	if trimmed == "" {
+		return true
+	}
+	return len([]rune(trimmed)) <= 12 || len(strings.Fields(trimmed)) <= 2
+}
+
+func pickTurnPacingKey(viewerMsg string) (string, bool) {
+	if isMinimalMessage(viewerMsg) {
+		return "llm_pacing_minimal", true
+	}
+	n := rand.IntN(100)
+	switch {
+	case n < 40:
+		return "llm_pacing_short", false
+	case n < 80:
+		return "llm_pacing_medium", false
+	default:
+		return "llm_pacing_long", false
+	}
 }
 
 // ParseLLMDecision parses the raw LLM response with fallbacks.
@@ -328,11 +390,13 @@ type responseFormat struct {
 }
 
 type chatRequest struct {
-	Model          string         `json:"model"`
-	Messages       []chatMessage  `json:"messages"`
-	MaxTokens      int            `json:"max_tokens,omitempty"`
-	Temperature    float64        `json:"temperature,omitempty"`
-	ResponseFormat responseFormat `json:"response_format"`
+	Model            string         `json:"model"`
+	Messages         []chatMessage  `json:"messages"`
+	MaxTokens        int            `json:"max_tokens,omitempty"`
+	Temperature      float64        `json:"temperature,omitempty"`
+	FrequencyPenalty float64        `json:"frequency_penalty,omitempty"`
+	PresencePenalty  float64        `json:"presence_penalty,omitempty"`
+	ResponseFormat   responseFormat `json:"response_format"`
 }
 
 type chatChoice struct {
@@ -364,9 +428,11 @@ func (c *Client) Generate(ctx context.Context, input domain.PromptInput) (domain
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
 		},
-		MaxTokens:      c.cfg.MaxTokens,
-		Temperature:    c.cfg.Temperature,
-		ResponseFormat: responseFormat{Type: "json_object"},
+		MaxTokens:        c.cfg.MaxTokens,
+		Temperature:      c.cfg.Temperature,
+		FrequencyPenalty: c.cfg.FrequencyPenalty,
+		PresencePenalty:  c.cfg.PresencePenalty,
+		ResponseFormat:   responseFormat{Type: "json_object"},
 	}
 
 	bodyBytes, err := json.Marshal(reqPayload)
