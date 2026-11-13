@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type ChatMessage struct {
 	MessageID       string    `json:"message_id"`
@@ -12,6 +15,8 @@ type ChatMessage struct {
 	Text            string    `json:"text"`
 	IsModerator     bool      `json:"is_moderator"`
 	IsBroadcaster   bool      `json:"is_broadcaster"`
+	IsSubscriber    bool      `json:"is_subscriber"`
+	IsVIP           bool      `json:"is_vip"`
 	Timestamp       time.Time `json:"timestamp"`
 }
 
@@ -95,4 +100,17 @@ type PromptInput struct {
 	ActiveSlots   map[string][]SlotHolder `json:"active_slots"`
 	RecentRoom    []RoomMessage           `json:"recent_room"`
 	ViewerMessage string                  `json:"viewer_message"`
+	ViewerRole    string                  `json:"viewer_role,omitempty"`
+	CurrentMood   string                  `json:"current_mood,omitempty"`
+	StreamGame    string                  `json:"stream_game,omitempty"`
+	StreamTitle   string                  `json:"stream_title,omitempty"`
+}
+
+type ChannelInfo struct {
+	GameName string `json:"game_name"`
+	Title    string `json:"title"`
+}
+
+type ChannelInfoFetcher interface {
+	GetChannelInfo(ctx context.Context, broadcasterID string) (ChannelInfo, error)
 }

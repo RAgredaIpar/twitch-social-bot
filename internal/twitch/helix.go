@@ -149,6 +149,35 @@ func (h *HelixClient) ResolveUsers(ctx context.Context, logins []string) (map[st
 	return result, nil
 }
 
+// GetChannelInfo fetches the current category/game and stream title for broadcasterID.
+func (h *HelixClient) GetChannelInfo(ctx context.Context, broadcasterID string) (domain.ChannelInfo, error) {
+	if strings.TrimSpace(broadcasterID) == "" {
+		return domain.ChannelInfo{}, nil
+	}
+	endpoint := strings.TrimRight(h.cfg.BaseURL, "/") + "/channels?broadcaster_id=" + url.QueryEscape(broadcasterID)
+
+	var responseData struct {
+		Data []struct {
+			GameName string `json:"game_name"`
+			Title    string `json:"title"`
+		} `json:"data"`
+	}
+
+	err := h.doRequestWithRetry(ctx, http.MethodGet, endpoint, nil, func(statusCode int) bool {
+		return statusCode == http.StatusOK
+	}, &responseData)
+	if err != nil {
+		return domain.ChannelInfo{}, err
+	}
+	if len(responseData.Data) == 0 {
+		return domain.ChannelInfo{}, nil
+	}
+	return domain.ChannelInfo{
+		GameName: responseData.Data[0].GameName,
+		Title:    responseData.Data[0].Title,
+	}, nil
+}
+
 func (h *HelixClient) doRequestWithRetry(
 	ctx context.Context,
 	method string,

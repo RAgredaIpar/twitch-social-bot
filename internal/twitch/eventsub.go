@@ -130,17 +130,23 @@ func ParseEventSubFrame(raw []byte, now time.Time) (messageType string, sessionI
 
 			isMod := false
 			isBroadcaster := false
+			isSub := false
+			isVIP := false
 
 			if ev.ChatterUserID != "" && ev.ChatterUserID == ev.BroadcasterUserID {
 				isBroadcaster = true
 			}
 
 			for _, b := range ev.Badges {
-				if b.SetID == "moderator" {
+				switch b.SetID {
+				case "moderator":
 					isMod = true
-				}
-				if b.SetID == "broadcaster" {
+				case "broadcaster":
 					isBroadcaster = true
+				case "subscriber", "founder":
+					isSub = true
+				case "vip":
+					isVIP = true
 				}
 			}
 
@@ -164,6 +170,8 @@ func ParseEventSubFrame(raw []byte, now time.Time) (messageType string, sessionI
 				Text:            ev.Message.Text,
 				IsModerator:     isMod,
 				IsBroadcaster:   isBroadcaster,
+				IsSubscriber:    isSub,
+				IsVIP:           isVIP,
 				Timestamp:       ts,
 			}
 		}
