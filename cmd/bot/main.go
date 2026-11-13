@@ -103,6 +103,7 @@ func main() {
 	}, clk)
 
 	var sender domain.ChatSender
+	var channelFetcher domain.ChannelInfoFetcher
 	var broadcasterID string
 	var botUserID string
 
@@ -142,6 +143,7 @@ func main() {
 			TokenManager: tm,
 		})
 		sender = helixCli
+		channelFetcher = helixCli
 
 		usersToResolve := []string{cfg.TwitchBroadcasterLogin}
 		if cfg.TwitchBotLogin != "" {
@@ -177,8 +179,9 @@ func main() {
 		Limiter:   lim,
 		Room:      rm,
 		Social:    soc,
-		Guard:     grd,
-		Locale:    loc,
+		Guard:       grd,
+		Locale:      loc,
+		ChannelInfo: channelFetcher,
 	})
 
 	if cfg.HTTPAddr != "" {

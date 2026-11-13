@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -41,9 +42,10 @@ type OrchestratorConfig struct {
 	Persona   domain.PersonaProvider
 	Limiter   *ratelimit.CooldownLimiter
 	Room      *room.Buffer
-	Social    *social.Engine
-	Guard     *safety.Guard
-	Locale    *i18n.Manager
+	Social      *social.Engine
+	Guard       *safety.Guard
+	Locale      *i18n.Manager
+	ChannelInfo domain.ChannelInfoFetcher
 }
 
 // Orchestrator coordinates chat messaging, rate limiting, room buffer,
@@ -55,6 +57,10 @@ type Orchestrator struct {
 	generatedReplies  int64
 	cfg               OrchestratorConfig
 	loc               *i18n.Manager
+	mood              *social.MoodTracker
+	channelMu         sync.Mutex
+	cachedChannel     domain.ChannelInfo
+	cachedChannelAt   time.Time
 }
 
 // NewOrchestrator creates a new conversational orchestrator.
@@ -67,8 +73,9 @@ func NewOrchestrator(cfg OrchestratorConfig) *Orchestrator {
 		loc, _ = i18n.NewManager("", "es")
 	}
 	return &Orchestrator{
-		cfg: cfg,
-		loc: loc,
+		cfg:  cfg,
+		loc:  loc,
+		mood: social.NewMoodTracker(cfg.Clock),
 	}
 }
 
@@ -423,6 +430,10 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		currentTier = o.cfg.Social.ResolveTier(spec, profile.Affinity)
 	}
 
+	streamInfo := o.getChannelInfo(ctx, msg.BroadcasterID)
+	viewerRole := resolveViewerRole(msg, profile)
+	currentMood := o.mood.Current()
+
 	decision, err := o.cfg.LLM.Generate(ctx, domain.PromptInput{
 		Persona:       spec,
 		Profile:       profile,
@@ -430,10 +441,15 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		ActiveSlots:   slots,
 		RecentRoom:    recentRoom,
 		ViewerMessage: cleanInput,
+		ViewerRole:    viewerRole,
+		CurrentMood:   currentMood,
+		StreamGame:    streamInfo.GameName,
+		StreamTitle:   streamInfo.Title,
 	})
 	if err != nil {
 		return fmt.Errorf("llm generate: %w", err)
 	}
+	o.mood.Record(decision.AffinityDelta)
 
 	// Push user message to room buffer
 	if o.cfg.Room != nil && o.cfg.Guard != nil {
@@ -528,4 +544,54 @@ func findSlotSpec(spec *domain.PersonaSpec, slotID string) *domain.SlotSpec {
 		}
 	}
 	return nil
+}
+
+const channelInfoTTL = 3 * time.Minute
+
+func (o *Orchestrator) getChannelInfo(ctx context.Context, broadcasterID string) domain.ChannelInfo {
+	if o.cfg.ChannelInfo == nil || strings.TrimSpace(broadcasterID) == "" {
+		return domain.ChannelInfo{}
+	}
+
+	now := o.cfg.Clock.Now()
+	o.channelMu.Lock()
+	if !o.cachedChannelAt.IsZero() && now.Sub(o.cachedChannelAt) < channelInfoTTL {
+		cached := o.cachedChannel
+		o.channelMu.Unlock()
+		return cached
+	}
+	o.channelMu.Unlock()
+
+	fetchCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	info, err := o.cfg.ChannelInfo.GetChannelInfo(fetchCtx, broadcasterID)
+	if err != nil {
+		o.channelMu.Lock()
+		cached := o.cachedChannel
+		o.channelMu.Unlock()
+		return cached
+	}
+
+	o.channelMu.Lock()
+	o.cachedChannel = info
+	o.cachedChannelAt = now
+	o.channelMu.Unlock()
+	return info
+}
+
+func resolveViewerRole(msg domain.ChatMessage, profile domain.ViewerProfile) string {
+	switch {
+	case msg.IsBroadcaster:
+		return "broadcaster"
+	case msg.IsModerator:
+		return "moderator"
+	case msg.IsVIP:
+		return "vip"
+	case msg.IsSubscriber:
+		return "subscriber"
+	case profile.InteractionCount == 0:
+		return "new"
+	default:
+		return "viewer"
+	}
 }
