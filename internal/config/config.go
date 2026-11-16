@@ -14,6 +14,7 @@ type Config struct {
 	BotLanguage            string        `json:"bot_language"`
 	LocaleDir              string        `json:"locale_dir"`
 	LLMAPIKey              string        `json:"llm_api_key"`
+	LLMProvider            string        `json:"llm_provider"`
 	LLMBaseURL             string        `json:"llm_base_url"`
 	LLMModel               string        `json:"llm_model"`
 	LLMTimeout             time.Duration `json:"llm_timeout"`
@@ -75,8 +76,9 @@ func LoadRaw(envFile string) (*Config, error) {
 		BotLanguage:            strings.ToLower(get("BOT_LANGUAGE", "en")),
 		LocaleDir:              get("LOCALE_DIR", "locales"),
 		LLMAPIKey:              get("LLM_API_KEY", ""),
+		LLMProvider:            get("LLM_PROVIDER", ""),
 		LLMBaseURL:             get("LLM_BASE_URL", "https://api.deepseek.com"),
-		LLMModel:               get("LLM_MODEL", "deepseek-flash"),
+		LLMModel:               get("LLM_MODEL", "deepseek-chat"),
 		TwitchClientID:         get("TWITCH_CLIENT_ID", ""),
 		TwitchBroadcasterLogin: get("TWITCH_BROADCASTER_LOGIN", ""),
 		TwitchBotLogin:         get("TWITCH_BOT_LOGIN", ""),
@@ -200,6 +202,7 @@ func SaveEnv(path string, cfg *Config) error {
 
 	b.WriteString("# DeepSeek / OpenAI-Compatible LLM\n")
 	b.WriteString(fmt.Sprintf("LLM_API_KEY=%s\n", cfg.LLMAPIKey))
+	b.WriteString(fmt.Sprintf("LLM_PROVIDER=%s\n", cfg.LLMProvider))
 	b.WriteString(fmt.Sprintf("LLM_BASE_URL=%s\n", cfg.LLMBaseURL))
 	b.WriteString(fmt.Sprintf("LLM_MODEL=%s\n", cfg.LLMModel))
 	b.WriteString(fmt.Sprintf("LLM_TIMEOUT_MS=%d\n\n", cfg.LLMTimeout.Milliseconds()))

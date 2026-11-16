@@ -79,8 +79,8 @@ func TestConfig_Defaults(t *testing.T) {
 	if cfg.LLMBaseURL != "https://api.deepseek.com" {
 		t.Errorf("expected LLMBaseURL 'https://api.deepseek.com', got '%s'", cfg.LLMBaseURL)
 	}
-	if cfg.LLMModel != "deepseek-flash" {
-		t.Errorf("expected LLMModel 'deepseek-flash', got '%s'", cfg.LLMModel)
+	if cfg.LLMModel != "deepseek-chat" {
+		t.Errorf("expected LLMModel 'deepseek-chat', got '%s'", cfg.LLMModel)
 	}
 	if cfg.LLMTimeout != 8*time.Second {
 		t.Errorf("expected LLMTimeout 8s, got %v", cfg.LLMTimeout)
