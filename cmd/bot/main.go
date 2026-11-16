@@ -27,7 +27,11 @@ import (
 	"github.com/twitch-social-bot/internal/social"
 	"github.com/twitch-social-bot/internal/store"
 	"github.com/twitch-social-bot/internal/twitch"
+	"github.com/twitch-social-bot/internal/updater"
 )
+
+// Version can be overridden at build time via -ldflags "-X main.Version=vX.Y.Z".
+var Version = "v1.1.0"
 
 type stdoutSender struct{}
 
@@ -37,8 +41,11 @@ func (s *stdoutSender) SendReply(ctx context.Context, broadcasterID, senderID, r
 }
 
 func main() {
+	updater.CleanupOldBinary()
+
 	envFile := flag.String("env", ".env", "Path to .env configuration file")
 	headless := flag.Bool("run", false, "Start bot directly without interactive CLI menu")
+	skipUpdate := flag.Bool("no-update", false, "Skip startup update check")
 	flag.Parse()
 
 	cli.EnableANSI()
@@ -63,6 +70,29 @@ func main() {
 	}
 
 	if !*headless && cli.IsInteractiveTTY() {
+		if !*skipUpdate {
+			updCfg := updater.Config{Version: Version}
+			if info, uErr := updater.Check(ctx, updCfg); uErr == nil && info != nil {
+				accepted, pErr := cli.PromptMandatoryUpdate(os.Stdin, os.Stdout, cfg, loc, pm, info.CurrentVersion, info.LatestVersion)
+				if pErr != nil {
+					log.Fatalf("Update prompt error: %v", pErr)
+				}
+				if !accepted {
+					return
+				}
+				fmt.Printf("\n  %s\n", loc.Get("cli_update_progress"))
+				if aErr := updater.Apply(ctx, updCfg, info); aErr != nil {
+					fmt.Printf("  %s\n", loc.Format("cli_update_failed", aErr))
+					return
+				}
+				fmt.Printf("  %s\n\n", loc.Get("cli_update_done"))
+				if rErr := updater.Relaunch(os.Args[1:]); rErr != nil {
+					log.Fatalf("Restart error: %v", rErr)
+				}
+				return
+			}
+		}
+
 		shouldStart, updatedCfg, cliErr := cli.RunInteractive(os.Stdin, os.Stdout, *envFile, cfg, loc, pm)
 		if cliErr != nil {
 			log.Fatalf("CLI error: %v", cliErr)
