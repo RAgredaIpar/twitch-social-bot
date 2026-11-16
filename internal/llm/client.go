@@ -21,6 +21,7 @@ import (
 var _ domain.LLMClient = (*Client)(nil)
 
 type ClientConfig struct {
+	Provider         string
 	BaseURL          string
 	APIKey           string
 	Model            string
@@ -43,11 +44,21 @@ type Client struct {
 }
 
 func NewClient(cfg ClientConfig, clock domain.Clock) *Client {
+	provider := DetectProvider(cfg.Provider, cfg.BaseURL)
+	if cfg.Provider == "" {
+		cfg.Provider = provider.ID
+	}
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.deepseek.com"
+		cfg.BaseURL = provider.DefaultBaseURL
+		if cfg.BaseURL == "" {
+			cfg.BaseURL = "https://api.deepseek.com"
+		}
 	}
 	if cfg.Model == "" {
-		cfg.Model = "deepseek-flash"
+		cfg.Model = provider.FallbackModel
+		if cfg.Model == "" {
+			cfg.Model = "deepseek-chat"
+		}
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 8 * time.Second
@@ -409,8 +420,26 @@ type chatResponse struct {
 	Choices []chatChoice `json:"choices"`
 }
 
-func formatEndpoint(baseURL string) string {
+type anthropicRequest struct {
+	Model       string        `json:"model"`
+	System      string        `json:"system,omitempty"`
+	Messages    []chatMessage `json:"messages"`
+	MaxTokens   int           `json:"max_tokens"`
+	Temperature float64       `json:"temperature,omitempty"`
+}
+
+type anthropicResponse struct {
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
+}
+
+func formatEndpoint(baseURL, protocol string) string {
 	baseURL = strings.TrimRight(baseURL, "/")
+	if protocol == "anthropic" {
+		return baseURL + "/messages"
+	}
 	return baseURL + "/chat/completions"
 }
 
@@ -421,33 +450,53 @@ func (c *Client) Generate(ctx context.Context, input domain.PromptInput) (domain
 
 	systemPrompt := BuildSystemPromptWithLocale(input.Persona, c.cfg.Locale)
 	userPrompt := BuildUserPromptWithLocale(input, c.cfg.Locale)
+	provider := DetectProvider(c.cfg.Provider, c.cfg.BaseURL)
 
-	reqPayload := chatRequest{
-		Model: c.cfg.Model,
-		Messages: []chatMessage{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userPrompt},
-		},
-		MaxTokens:        c.cfg.MaxTokens,
-		Temperature:      c.cfg.Temperature,
-		FrequencyPenalty: c.cfg.FrequencyPenalty,
-		PresencePenalty:  c.cfg.PresencePenalty,
-		ResponseFormat:   responseFormat{Type: "json_object"},
+	var bodyBytes []byte
+	var err error
+	if provider.Protocol == "anthropic" {
+		reqPayload := anthropicRequest{
+			Model:       c.cfg.Model,
+			System:      systemPrompt,
+			Messages:    []chatMessage{{Role: "user", Content: userPrompt}},
+			MaxTokens:   c.cfg.MaxTokens,
+			Temperature: c.cfg.Temperature,
+		}
+		bodyBytes, err = json.Marshal(reqPayload)
+	} else {
+		reqPayload := chatRequest{
+			Model: c.cfg.Model,
+			Messages: []chatMessage{
+				{Role: "system", Content: systemPrompt},
+				{Role: "user", Content: userPrompt},
+			},
+			MaxTokens:      c.cfg.MaxTokens,
+			Temperature:    c.cfg.Temperature,
+			ResponseFormat: responseFormat{Type: "json_object"},
+		}
+		if provider.ID != "gemini" {
+			reqPayload.FrequencyPenalty = c.cfg.FrequencyPenalty
+			reqPayload.PresencePenalty = c.cfg.PresencePenalty
+		}
+		bodyBytes, err = json.Marshal(reqPayload)
 	}
-
-	bodyBytes, err := json.Marshal(reqPayload)
 	if err != nil {
 		return domain.LLMDecision{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	endpoint := formatEndpoint(c.cfg.BaseURL)
+	endpoint := formatEndpoint(c.cfg.BaseURL, provider.Protocol)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return domain.LLMDecision{}, fmt.Errorf("failed to create http request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if c.cfg.APIKey != "" {
+	if provider.Protocol == "anthropic" {
+		if c.cfg.APIKey != "" {
+			req.Header.Set("x-api-key", c.cfg.APIKey)
+		}
+		req.Header.Set("anthropic-version", "2023-06-01")
+	} else if c.cfg.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 	}
 
@@ -473,16 +522,33 @@ func (c *Client) Generate(ctx context.Context, input domain.PromptInput) (domain
 		return domain.LLMDecision{}, fmt.Errorf("llm api error: status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return domain.LLMDecision{}, fmt.Errorf("failed to unmarshal llm response: %w", err)
+	var rawContent string
+	if provider.Protocol == "anthropic" {
+		var antResp anthropicResponse
+		if err := json.Unmarshal(respBody, &antResp); err != nil {
+			return domain.LLMDecision{}, fmt.Errorf("failed to unmarshal anthropic response: %w", err)
+		}
+		for _, block := range antResp.Content {
+			if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+				rawContent = block.Text
+				break
+			}
+		}
+		if rawContent == "" {
+			return domain.LLMDecision{}, errors.New("anthropic returned no text content")
+		}
+	} else {
+		var chatResp chatResponse
+		if err := json.Unmarshal(respBody, &chatResp); err != nil {
+			return domain.LLMDecision{}, fmt.Errorf("failed to unmarshal llm response: %w", err)
+		}
+		if len(chatResp.Choices) == 0 {
+			return domain.LLMDecision{}, errors.New("llm returned no choices")
+		}
+		rawContent = chatResp.Choices[0].Message.Content
 	}
 
-	if len(chatResp.Choices) == 0 {
-		return domain.LLMDecision{}, errors.New("llm returned no choices")
-	}
-
-	decision, err := ParseLLMDecision(chatResp.Choices[0].Message.Content)
+	decision, err := ParseLLMDecision(rawContent)
 	if err != nil {
 		return domain.LLMDecision{}, fmt.Errorf("failed to parse decision: %w", err)
 	}
