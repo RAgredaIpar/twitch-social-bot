@@ -29,6 +29,9 @@ const (
 	cWhite  = "\x1b[38;2;229;231;235m"
 )
 
+// AppVersion is displayed on the top-right of the CLI header card when set.
+var AppVersion = ""
+
 // RenderCard prints the modern terminal header card with the truecolor dino
 // mascot on the left and clean bot status on the right.
 func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *domain.PersonaSpec) {
@@ -57,9 +60,18 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 		twitchStatus = cPurple + "@" + botName + " -> @" + cfg.TwitchBroadcasterLogin + cReset
 	}
 
+	titleLine := cBold + cGreen + "Twitch Social Bot" + cReset
+	if AppVersion != "" {
+		pad := (rightWidth - 2) - len("Twitch Social Bot") - utf8.RuneCountInString(AppVersion)
+		if pad < 1 {
+			pad = 1
+		}
+		titleLine += strings.Repeat(" ", pad) + cGray + AppVersion + cReset
+	}
+
 	rightLines := []string{
 		"",
-		cBold + cGreen + "Twitch Social Bot" + cReset,
+		titleLine,
 		cDim + cWhite + loc.Get("cli_subtitle") + cReset,
 		cGray + strings.Repeat("─", rightWidth-2) + cReset,
 		formatKV(loc.Get("cli_label_language"), langDisplay),

@@ -49,6 +49,7 @@ func main() {
 	flag.Parse()
 
 	cli.EnableANSI()
+	cli.AppVersion = Version
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

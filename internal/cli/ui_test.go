@@ -51,6 +51,13 @@ func TestRenderCard_ContainsTitleWithoutV2AndShowsStatus(t *testing.T) {
 	if !strings.Contains(out, "[en] English") {
 		t.Fatalf("expected '[en] English' in card")
 	}
+	cli.AppVersion = "v1.0.1"
+	defer func() { cli.AppVersion = "" }()
+	var bufVer bytes.Buffer
+	cli.RenderCard(&bufVer, cfg, loc, nil)
+	if !strings.Contains(bufVer.String(), "v1.0.1") {
+		t.Fatalf("expected AppVersion 'v1.0.1' in card")
+	}
 }
 
 func TestRunInteractive_FirstTimeOnboarding(t *testing.T) {
