@@ -498,3 +498,28 @@ func promptField(reader *bufio.Reader, out io.Writer, label, current string, sec
 	}
 	return val, nil
 }
+
+// PromptMandatoryUpdate displays a blocking update screen and returns true only if the user accepts updating.
+func PromptMandatoryUpdate(in io.Reader, out io.Writer, cfg *config.Config, loc *i18n.Manager, pm *persona.Manager, currentVer, latestVer string) (bool, error) {
+	reader := bufio.NewReader(in)
+	clearScreenIfTTY(in, out)
+
+	var active *domain.PersonaSpec
+	if pm != nil {
+		active = pm.Current()
+	}
+	RenderCard(out, cfg, loc, active)
+
+	fmt.Fprintf(out, "  %s%s── %s ──%s\n", cBold, cYellow, loc.Get("cli_update_title"), cReset)
+	fmt.Fprintf(out, "  %s\n\n", loc.Format("cli_update_desc", currentVer, latestVer))
+
+	opts := []string{
+		loc.Get("cli_update_accept"),
+		loc.Get("cli_update_exit"),
+	}
+	idx, err := selectOption(in, reader, out, loc.Get("cli_menu_prompt"), loc.Get("cli_arrow_hint"), opts, 0)
+	if err != nil {
+		return false, err
+	}
+	return idx == 0, nil
+}

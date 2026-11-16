@@ -184,3 +184,26 @@ func TestRunInteractive_SwitchLanguageAndSetupEnv(t *testing.T) {
 		t.Fatalf("saved .env missing expected entries:\n%s", envContent)
 	}
 }
+
+func TestPromptMandatoryUpdate_AcceptAndExit(t *testing.T) {
+	loc, err := i18n.NewManager(filepath.Join("..", "..", "locales"), "es")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{BotLanguage: "es", LLMAPIKey: "sk-test"}
+
+	var outAccept bytes.Buffer
+	ok, err := cli.PromptMandatoryUpdate(strings.NewReader("1\n"), &outAccept, cfg, loc, nil, "abc1234", "def5678")
+	if err != nil || !ok {
+		t.Fatalf("expected accept=true, got %v (err=%v)", ok, err)
+	}
+	if !strings.Contains(outAccept.String(), "abc1234 -> def5678") {
+		t.Fatalf("expected version diff in prompt output:\n%s", outAccept.String())
+	}
+
+	var outExit bytes.Buffer
+	ok, err = cli.PromptMandatoryUpdate(strings.NewReader("2\n"), &outExit, cfg, loc, nil, "abc1234", "def5678")
+	if err != nil || ok {
+		t.Fatalf("expected accept=false on exit, got %v (err=%v)", ok, err)
+	}
+}

@@ -325,6 +325,13 @@ func defaultEnglishBundle() *Bundle {
 			"cli_onboard_done":            "Setup complete! Your .env file is saved and ready.",
 			"cli_onboard_oauth_dedicated": "Next step when starting the bot:\n  • The bot will print a code and link (https://www.twitch.tv/activate).\n  • IMPORTANT: Open that link signed into the BOT's Twitch account (%s), NOT your streamer account.\n  • Authorize it there so the bot speaks as %s.\n  • In your channel (%s), run /mod %s in chat.",
 			"cli_onboard_oauth_same":      "Next step when starting the bot:\n  • The bot will print a code and link (https://www.twitch.tv/activate).\n  • Open that link signed into your account (%s) and authorize it.",
+			"cli_update_title":            "Mandatory Update Available",
+			"cli_update_desc":             "A new version is available on GitHub (%s -> %s). You must update before using the bot.",
+			"cli_update_accept":           "Update now and restart",
+			"cli_update_exit":             "Exit",
+			"cli_update_progress":         "Downloading and installing update...",
+			"cli_update_done":             "Update installed! Restarting Twitch Social Bot...",
+			"cli_update_failed":           "Update failed: %v",
 		},
 	}
 }
@@ -433,6 +440,13 @@ func defaultSpanishBundle() *Bundle {
 			"cli_onboard_done":            "¡Configuración completada! Tu archivo .env quedó guardado y listo.",
 			"cli_onboard_oauth_dedicated": "Siguiente paso al iniciar el bot:\n  • El bot generará un código y un link (https://www.twitch.tv/activate).\n  • IMPORTANTE: Abre ese link con la sesión INICIADA EN LA CUENTA DEL BOT (%s), NO en tu cuenta de streamer.\n  • Acepta los permisos en esa cuenta y el bot responderá como %s.\n  • En tu canal (%s), escribe /mod %s en el chat.",
 			"cli_onboard_oauth_same":      "Siguiente paso al iniciar el bot:\n  • El bot generará un código y un link (https://www.twitch.tv/activate).\n  • Abre ese link con la sesión INICIADA en tu cuenta (%s) y acepta los permisos.",
+			"cli_update_title":            "Actualización Obligatoria Disponible",
+			"cli_update_desc":             "Hay una nueva versión en GitHub (%s -> %s). Debes actualizar para continuar usando el bot.",
+			"cli_update_accept":           "Actualizar ahora y reiniciar",
+			"cli_update_exit":             "Salir",
+			"cli_update_progress":         "Descargando e instalando actualización...",
+			"cli_update_done":             "¡Actualización instalada! Reiniciando Twitch Social Bot...",
+			"cli_update_failed":           "Error al actualizar: %v",
 		},
 	}
 }
