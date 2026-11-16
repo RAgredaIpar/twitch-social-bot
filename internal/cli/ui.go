@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/twitch-social-bot/internal/config"
 	"github.com/twitch-social-bot/internal/domain"
 	"github.com/twitch-social-bot/internal/i18n"
+	"github.com/twitch-social-bot/internal/llm"
 	"github.com/twitch-social-bot/internal/persona"
 )
 
@@ -46,9 +48,20 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 		personaDisplay = fmt.Sprintf("%s (%s)", active.BotName, active.ID)
 	}
 
-	llmStatus := cYellow + loc.Get("cli_status_missing_key") + cReset
-	if strings.TrimSpace(cfg.LLMAPIKey) != "" {
-		llmStatus = cMint + loc.Get("cli_status_ready") + " (" + cfg.LLMModel + ")" + cReset
+	provider := llm.DetectProvider(cfg.LLMProvider, cfg.LLMBaseURL)
+	modelName := cfg.LLMModel
+	if modelName == "" {
+		modelName = provider.FallbackModel
+	}
+	modelDisplay := provider.ColorANSI + provider.Name + " • " + modelName + cReset
+
+	apiKeyStatus := cYellow + loc.Get("cli_status_missing_key") + cReset
+	if trimmedKey := strings.TrimSpace(cfg.LLMAPIKey); trimmedKey != "" {
+		masked := trimmedKey
+		if len(trimmedKey) > 8 {
+			masked = trimmedKey[:4] + "..." + trimmedKey[len(trimmedKey)-4:]
+		}
+		apiKeyStatus = cMint + loc.Get("cli_status_ready") + " (" + masked + ")" + cReset
 	}
 
 	twitchStatus := cCyan + loc.Get("cli_status_local_mode") + cReset
@@ -76,10 +89,10 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 		cGray + strings.Repeat("─", rightWidth-2) + cReset,
 		formatKV(loc.Get("cli_label_language"), langDisplay),
 		formatKV(loc.Get("cli_label_persona"), personaDisplay),
-		formatKV(loc.Get("cli_label_llm"), llmStatus),
+		formatKV(loc.Get("cli_label_model"), modelDisplay),
+		formatKV(loc.Get("cli_label_apikey"), apiKeyStatus),
 		formatKV(loc.Get("cli_label_twitch"), twitchStatus),
 		formatKV(loc.Get("cli_label_config"), fmt.Sprintf("%d facts • %dms cooldown", cfg.MaxViewerFacts, cfg.GlobalCooldown.Milliseconds())),
-		"",
 		"",
 		"",
 	}
@@ -303,15 +316,10 @@ func runOnboarding(in io.Reader, reader *bufio.Reader, out io.Writer, envPath st
 
 	fmt.Fprintf(out, "\n  %s%s── %s ──%s\n\n", cBold, cGreen, loc.Get("cli_onboard_welcome"), cReset)
 
-	// Step 1: DeepSeek API Key
-	fmt.Fprintf(out, "  %s%s%s\n", cBold, cCyan+loc.Get("cli_onboard_step1_title"), cReset)
-	fmt.Fprintf(out, "  %s%s%s\n\n", cDim, loc.Get("cli_onboard_step1_guide"), cReset)
-	for strings.TrimSpace(cfg.LLMAPIKey) == "" {
-		apiKey, pErr := promptField(reader, out, "LLM_API_KEY (DeepSeek)", cfg.LLMAPIKey, true)
-		if pErr != nil {
-			return pErr
-		}
-		cfg.LLMAPIKey = strings.TrimSpace(apiKey)
+	// Step 1: AI Provider & API Key (auto-discovers latest model via GET /models)
+	fmt.Fprintf(out, "  %s%s%s\n\n", cBold, cCyan+loc.Get("cli_onboard_step1_title"), cReset)
+	if err := promptAIProvider(in, reader, out, cfg, loc, true); err != nil {
+		return err
 	}
 
 	// Step 2: Twitch Developer App
@@ -392,11 +400,9 @@ func runSetupWizard(in io.Reader, reader *bufio.Reader, out io.Writer, envPath s
 	fmt.Fprintf(out, "\n  %s%s── %s ──%s\n", cBold, cCyan, loc.Get("cli_wizard_title"), cReset)
 	fmt.Fprintf(out, "  %s%s%s\n\n", cDim, loc.Get("cli_wizard_desc"), cReset)
 
-	apiKey, err := promptField(reader, out, "LLM_API_KEY (DeepSeek)", cfg.LLMAPIKey, true)
-	if err != nil {
+	if err := promptAIProvider(in, reader, out, cfg, loc, false); err != nil {
 		return err
 	}
-	cfg.LLMAPIKey = apiKey
 
 	clientID, err := promptField(reader, out, "TWITCH_CLIENT_ID", cfg.TwitchClientID, false)
 	if err != nil {
@@ -534,4 +540,62 @@ func PromptMandatoryUpdate(in io.Reader, out io.Writer, cfg *config.Config, loc 
 		return false, err
 	}
 	return idx == 0, nil
+}
+
+func promptAIProvider(in io.Reader, reader *bufio.Reader, out io.Writer, cfg *config.Config, loc *i18n.Manager, requireKey bool) error {
+	providers := llm.Providers()
+	current := llm.DetectProvider(cfg.LLMProvider, cfg.LLMBaseURL)
+	opts := make([]string, len(providers))
+	initIdx := 0
+	for i, p := range providers {
+		opts[i] = p.ColorANSI + p.Name + cReset
+		if p.ID == current.ID {
+			initIdx = i
+		}
+	}
+
+	idx, err := selectOption(in, reader, out, loc.Get("cli_provider_prompt"), loc.Get("cli_arrow_hint"), opts, initIdx)
+	if err != nil || idx < 0 || idx >= len(providers) {
+		return err
+	}
+	chosen := providers[idx]
+	cfg.LLMProvider = chosen.ID
+
+	if chosen.ID == "custom" {
+		fmt.Fprintln(out)
+		for {
+			baseURL, uErr := promptField(reader, out, loc.Get("cli_provider_custom_url"), cfg.LLMBaseURL, false)
+			if uErr != nil {
+				return uErr
+			}
+			cfg.LLMBaseURL = strings.TrimSpace(baseURL)
+			if cfg.LLMBaseURL != "" {
+				break
+			}
+		}
+	} else {
+		cfg.LLMBaseURL = chosen.DefaultBaseURL
+		if chosen.KeyGuideURL != "" {
+			fmt.Fprintf(out, "\n  %s%s%s\n", cDim, loc.Format("cli_provider_key_guide", chosen.KeyGuideURL), cReset)
+		}
+	}
+
+	fmt.Fprintln(out)
+	for {
+		keyLabel := fmt.Sprintf("LLM_API_KEY (%s%s%s)", chosen.ColorANSI, chosen.Name, cReset)
+		apiKey, kErr := promptField(reader, out, keyLabel, cfg.LLMAPIKey, true)
+		if kErr != nil {
+			return kErr
+		}
+		cfg.LLMAPIKey = strings.TrimSpace(apiKey)
+		if !requireKey || cfg.LLMAPIKey != "" {
+			break
+		}
+	}
+
+	fmt.Fprintf(out, "  %s%s%s\n", cDim, loc.Get("cli_provider_detecting"), cReset)
+	model := llm.DiscoverBestModel(context.Background(), nil, chosen.ID, cfg.LLMBaseURL, cfg.LLMAPIKey)
+	cfg.LLMModel = model
+	fmt.Fprintf(out, "  %s✓ %s%s\n", chosen.ColorANSI, loc.Format("cli_provider_model_selected", model), cReset)
+	return nil
 }

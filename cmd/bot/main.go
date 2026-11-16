@@ -126,7 +126,8 @@ func main() {
 	grd := safety.NewGuard(400, 480)
 
 	llmCli := llm.NewClient(llm.ClientConfig{
-		BaseURL: cfg.LLMBaseURL,
+		Provider: cfg.LLMProvider,
+		BaseURL:  cfg.LLMBaseURL,
 		APIKey:  cfg.LLMAPIKey,
 		Model:   cfg.LLMModel,
 		Timeout: cfg.LLMTimeout,

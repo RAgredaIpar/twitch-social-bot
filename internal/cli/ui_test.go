@@ -83,7 +83,9 @@ func TestRunInteractive_FirstTimeOnboarding(t *testing.T) {
 
 	// Simulate first-time onboarding in non-TTY fallback mode:
 	// 2 -> Español
-	// sk-onboard-key -> DeepSeek API key
+	// 7 -> Custom / Private API
+	// http://127.0.0.1:1 -> Custom Base URL (offline-safe)
+	// sk-onboard-key -> API key
 	// cid-onboard -> Twitch Client ID
 	// streamer_one -> Broadcaster login
 	// 1 -> Dedicated bot account
@@ -92,6 +94,8 @@ func TestRunInteractive_FirstTimeOnboarding(t *testing.T) {
 	// 5 -> Exit
 	input := strings.Join([]string{
 		"2",
+		"7",
+		"http://127.0.0.1:1",
 		"sk-onboard-key",
 		"cid-onboard",
 		"streamer_one",
@@ -153,12 +157,13 @@ func TestRunInteractive_SwitchLanguageAndSetupEnv(t *testing.T) {
 
 	// Simulate returning user (skips onboarding):
 	// 3 -> Switch language -> 2 (es)
-	// 2 -> Setup wizard -> sk-1234567890, cid-abc, streamer_one, mochi_bot, 20
+	// 2 -> Setup wizard -> 1 (DeepSeek), sk-1234567890, cid-abc, streamer_one, mochi_bot, 20
 	// 5 -> Exit
 	input := strings.Join([]string{
 		"3",
 		"2",
 		"2",
+		"1",
 		"sk-1234567890",
 		"cid-abc",
 		"streamer_one",
