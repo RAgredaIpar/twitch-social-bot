@@ -1,6 +1,7 @@
 id: "rpg_facciones"
 name: "RPG y Facciones"
 bot_name: "Lyra"
+theme_color: "#38BDF8"
 trigger_prefix: "!bot"
 max_positive_delta: 5
 max_negative_delta: -8

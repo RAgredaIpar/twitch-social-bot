@@ -1,6 +1,7 @@
 id: "cohost_amigos"
 name: "Co-Host Amigos"
 bot_name: "Mochi"
+theme_color: "#34D399"
 trigger_prefix: "!bot"
 max_positive_delta: 5
 max_negative_delta: -8

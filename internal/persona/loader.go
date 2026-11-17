@@ -88,6 +88,9 @@ func parseYAMLContent(content string) (*domain.PersonaSpec, error) {
 		case "trigger_prefix":
 			spec.TriggerPrefix = unquoteString(val)
 			i++
+		case "theme_color":
+			spec.ThemeColor = unquoteString(val)
+			i++
 		case "max_positive_delta":
 			v, err := parseInt(val)
 			if err != nil {
@@ -160,6 +163,29 @@ func parseYAMLContent(content string) (*domain.PersonaSpec, error) {
 				if strings.HasPrefix(bClean, "-") {
 					word := strings.TrimSpace(bClean[1:])
 					spec.BlockedWords = append(spec.BlockedWords, unquoteString(word))
+				}
+				i++
+			}
+		case "avatar_rows":
+			i++
+			for i < len(rawLines) {
+				aLine := rawLines[i]
+				aTrimmed := strings.TrimSpace(aLine)
+				if aTrimmed == "" || strings.HasPrefix(aTrimmed, "#") {
+					i++
+					continue
+				}
+				if countIndent(aLine) == 0 {
+					break
+				}
+				aClean := strings.TrimSpace(aLine)
+				if strings.HasPrefix(aClean, "-") {
+					item := strings.TrimSpace(aClean[1:])
+					if unq, uErr := strconv.Unquote(item); uErr == nil {
+						spec.AvatarRows = append(spec.AvatarRows, unq)
+					} else {
+						spec.AvatarRows = append(spec.AvatarRows, unquoteString(item))
+					}
 				}
 				i++
 			}

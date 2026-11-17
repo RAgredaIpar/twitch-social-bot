@@ -1,6 +1,7 @@
 id: "clan_jerarquia"
 name: "Clan y Jerarquía"
 bot_name: "Dante"
+theme_color: "#EF4444"
 trigger_prefix: "!bot"
 max_positive_delta: 5
 max_negative_delta: -8
