@@ -37,7 +37,7 @@ var AppVersion = ""
 // RenderCard prints the modern terminal header card with the truecolor dino
 // mascot on the left and clean bot status on the right.
 func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *domain.PersonaSpec) {
-	const innerWidth = 76
+	const innerWidth = 78
 	const leftPad = 2
 	const gap = 4
 	const rightWidth = innerWidth - leftPad - dinoArtWidth - gap
@@ -73,7 +73,9 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 		twitchStatus = cPurple + "@" + botName + " -> @" + cfg.TwitchBroadcasterLogin + cReset
 	}
 
-	titleLine := cBold + cGreen + "Twitch Social Bot" + cReset
+	accent := ThemeColorANSI(active)
+
+	titleLine := cBold + accent + "Twitch Social Bot" + cReset
 	if AppVersion != "" {
 		pad := (rightWidth - 2) - len("Twitch Social Bot") - utf8.RuneCountInString(AppVersion)
 		if pad < 1 {
@@ -88,7 +90,7 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 		cDim + cWhite + loc.Get("cli_subtitle") + cReset,
 		cGray + strings.Repeat("─", rightWidth-2) + cReset,
 		formatKV(loc.Get("cli_label_language"), langDisplay),
-		formatKV(loc.Get("cli_label_persona"), personaDisplay),
+		formatKV(loc.Get("cli_label_persona"), accent+personaDisplay+cReset),
 		formatKV(loc.Get("cli_label_model"), modelDisplay),
 		formatKV(loc.Get("cli_label_apikey"), apiKeyStatus),
 		formatKV(loc.Get("cli_label_twitch"), twitchStatus),
@@ -97,18 +99,19 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 		"",
 	}
 
-	fmt.Fprintf(w, "\n%s╭%s╮%s\n", cGreen, strings.Repeat("─", innerWidth), cReset)
-	fmt.Fprintf(w, "%s│%s%s%s│%s\n", cGreen, cReset, strings.Repeat(" ", innerWidth), cGreen, cReset)
+	fmt.Fprintf(w, "\n%s╭%s╮%s\n", accent, strings.Repeat("─", innerWidth), cReset)
+	fmt.Fprintf(w, "%s│%s%s%s│%s\n", accent, cReset, strings.Repeat(" ", innerWidth), accent, cReset)
 
-	totalRows := len(dinoArtRows)
+	avatarRows := AvatarForPersona(active)
+	totalRows := len(avatarRows)
 	if len(rightLines) > totalRows {
 		totalRows = len(rightLines)
 	}
 
 	for i := 0; i < totalRows; i++ {
 		art := strings.Repeat(" ", dinoArtWidth)
-		if i < len(dinoArtRows) {
-			art = dinoArtRows[i]
+		if i < len(avatarRows) {
+			art = avatarRows[i]
 		}
 		info := ""
 		if i < len(rightLines) {
@@ -120,18 +123,18 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 			trail = 0
 		}
 		fmt.Fprintf(w, "%s│%s%s%s%s%s%s%s│%s\n",
-			cGreen, cReset,
+			accent, cReset,
 			strings.Repeat(" ", leftPad),
 			art,
 			strings.Repeat(" ", gap),
 			info,
 			strings.Repeat(" ", trail),
-			cGreen, cReset,
+			accent, cReset,
 		)
 	}
 
-	fmt.Fprintf(w, "%s│%s%s%s│%s\n", cGreen, cReset, strings.Repeat(" ", innerWidth), cGreen, cReset)
-	fmt.Fprintf(w, "%s╰%s╯%s\n\n", cGreen, strings.Repeat("─", innerWidth), cReset)
+	fmt.Fprintf(w, "%s│%s%s%s│%s\n", accent, cReset, strings.Repeat(" ", innerWidth), accent, cReset)
+	fmt.Fprintf(w, "%s╰%s╯%s\n\n", accent, strings.Repeat("─", innerWidth), cReset)
 }
 
 func formatKV(label, val string) string {
@@ -479,9 +482,20 @@ func runPersonaSelector(in io.Reader, reader *bufio.Reader, out io.Writer, envPa
 	}
 
 	fmt.Fprintln(out)
-	idx, err := selectOption(in, reader, out, loc.Get("cli_persona_title"), loc.Get("cli_arrow_hint"), ids, initIdx)
+	opts := make([]string, len(ids)+1)
+	for i, id := range ids {
+		color := ThemeColorANSI(&domain.PersonaSpec{ID: id})
+		opts[i] = color + id + cReset
+	}
+	opts[len(ids)] = cMint + loc.Get("cli_persona_create_opt") + cReset
+
+	idx, err := selectOption(in, reader, out, loc.Get("cli_persona_title"), loc.Get("cli_arrow_hint"), opts, initIdx)
 	if err != nil || idx < 0 {
 		return err
+	}
+
+	if idx == len(ids) {
+		return runCreatePersonaWizard(in, reader, out, envPath, cfg, loc, pm)
 	}
 
 	spec, err := pm.Switch(ids[idx])
@@ -494,6 +508,225 @@ func runPersonaSelector(in io.Reader, reader *bufio.Reader, out io.Writer, envPa
 	}
 	fmt.Fprintf(out, "\n  %s✓ %s (%s)%s\n", cGreen, loc.Get("cli_persona_saved"), spec.BotName, cReset)
 	return nil
+}
+
+func runCreatePersonaWizard(in io.Reader, reader *bufio.Reader, out io.Writer, envPath string, cfg *config.Config, loc *i18n.Manager, pm *persona.Manager) error {
+	fmt.Fprintf(out, "\n  %s%s── %s ──%s\n\n", cBold, cCyan, loc.Get("cli_persona_create_title"), cReset)
+
+	var id string
+	for {
+		rawID, err := promptField(reader, out, loc.Get("cli_persona_id_prompt"), "", false)
+		if err != nil {
+			return err
+		}
+		id = sanitizePersonaID(rawID)
+		if id != "" {
+			break
+		}
+	}
+
+	name, err := promptField(reader, out, loc.Get("cli_persona_name_prompt"), id, false)
+	if err != nil {
+		return err
+	}
+	botName, err := promptField(reader, out, loc.Get("cli_persona_botname_prompt"), name, false)
+	if err != nil {
+		return err
+	}
+	desc, err := promptField(reader, out, loc.Get("cli_persona_desc_prompt"), "Eres "+botName+", un co-host carismático y directo del canal.", false)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out)
+	imgOpts := []string{
+		loc.Get("cli_persona_img_custom"),
+		loc.Get("cli_persona_img_default"),
+	}
+	imgChoice, err := selectOption(in, reader, out, loc.Get("cli_persona_img_prompt"), loc.Get("cli_arrow_hint"), imgOpts, 0)
+	if err != nil {
+		return err
+	}
+
+	var avatarRows []string
+	if imgChoice == 0 {
+		for {
+			imgPath, pErr := promptField(reader, out, loc.Get("cli_persona_img_path"), "", false)
+			if pErr != nil {
+				return pErr
+			}
+			if strings.TrimSpace(imgPath) == "" {
+				break
+			}
+			rows, convErr := ImageFileToANSI(imgPath)
+			if convErr != nil {
+				fmt.Fprintf(out, "  %s%s%s\n", cYellow, loc.Format("cli_persona_img_err", convErr), cReset)
+				continue
+			}
+			avatarRows = rows
+			fmt.Fprintf(out, "\n  %s%s%s\n", cDim, loc.Get("cli_persona_img_preview"), cReset)
+			for _, r := range avatarRows {
+				fmt.Fprintf(out, "  %s\n", r)
+			}
+			break
+		}
+	}
+
+	personaDir := cfg.PersonaDir
+	if personaDir == "" {
+		personaDir = "personas"
+	}
+	if err := os.MkdirAll(personaDir, 0755); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out)
+	colorChoices := []struct {
+		Label string
+		Hex   string
+	}{
+		{"Verde Esmeralda / Emerald", "#34D399"},
+		{"Rosa / Pink", "#F472B6"},
+		{"Cian / Cyan", "#38BDF8"},
+		{"Rojo / Red", "#EF4444"},
+		{"Morado / Purple", "#A855F7"},
+		{"Dorado / Gold", "#FACC15"},
+	}
+	colorOpts := make([]string, len(colorChoices))
+	for i, cc := range colorChoices {
+		colorOpts[i] = hexToANSI(cc.Hex) + cc.Label + cReset
+	}
+	cIdx, err := selectOption(in, reader, out, loc.Get("cli_persona_color_prompt"), loc.Get("cli_arrow_hint"), colorOpts, 0)
+	if err != nil {
+		return err
+	}
+	themeHex := colorChoices[0].Hex
+	if cIdx >= 0 && cIdx < len(colorChoices) {
+		themeHex = colorChoices[cIdx].Hex
+	}
+
+	targetFile := filepath.Join(personaDir, id+".yaml")
+	if err := writeCustomPersonaYAML(targetFile, id, name, botName, themeHex, desc, avatarRows); err != nil {
+		return err
+	}
+
+	if _, err := pm.Switch(targetFile); err != nil {
+		return err
+	}
+	cfg.PersonaFile = targetFile
+	if err := config.SaveEnv(envPath, cfg); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "\n  %s✓ %s%s\n", hexToANSI(themeHex), loc.Format("cli_persona_created", botName), cReset)
+	return nil
+}
+
+// ThemeColorANSI returns the ANSI Truecolor escape sequence for a persona's CLI border/accent.
+func ThemeColorANSI(spec *domain.PersonaSpec) string {
+	if spec != nil {
+		if code := hexToANSI(spec.ThemeColor); code != "" {
+			return code
+		}
+		switch spec.ID {
+		case "cohost_amigos":
+			return hexToANSI("#34D399")
+		case "drama_romance":
+			return hexToANSI("#F472B6")
+		case "rpg_facciones":
+			return hexToANSI("#38BDF8")
+		case "clan_jerarquia":
+			return hexToANSI("#EF4444")
+		}
+	}
+	return cGreen
+}
+
+func hexToANSI(hex string) string {
+	h := strings.TrimPrefix(strings.TrimSpace(hex), "#")
+	if len(h) != 6 {
+		return ""
+	}
+	r, err1 := strconv.ParseUint(h[0:2], 16, 8)
+	g, err2 := strconv.ParseUint(h[2:4], 16, 8)
+	b, err3 := strconv.ParseUint(h[4:6], 16, 8)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return ""
+	}
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
+}
+
+func sanitizePersonaID(raw string) string {
+	lower := strings.ToLower(strings.TrimSpace(raw))
+	var sb strings.Builder
+	for _, r := range lower {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			sb.WriteRune(r)
+		case r == '_' || r == '-' || r == ' ':
+			sb.WriteByte('_')
+		}
+	}
+	return strings.Trim(sb.String(), "_")
+}
+
+func writeCustomPersonaYAML(path, id, name, botName, themeColor, desc string, avatarRows []string) error {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("id: %s\n", strconv.Quote(id)))
+	sb.WriteString(fmt.Sprintf("name: %s\n", strconv.Quote(name)))
+	sb.WriteString(fmt.Sprintf("bot_name: %s\n", strconv.Quote(botName)))
+	if themeColor != "" {
+		sb.WriteString(fmt.Sprintf("theme_color: %s\n", strconv.Quote(themeColor)))
+	}
+	sb.WriteString("trigger_prefix: \"!bot\"\n")
+	sb.WriteString("max_positive_delta: 5\n")
+	sb.WriteString("max_negative_delta: -8\n\n")
+	sb.WriteString("base_persona: |\n")
+	for _, line := range strings.Split(desc, "\n") {
+		sb.WriteString("  " + strings.TrimSpace(line) + "\n")
+	}
+	sb.WriteString("\nblocked_words:\n  - \"toxicidad_extrema\"\n  - \"insulto_grave\"\n\n")
+	if len(avatarRows) > 0 {
+		sb.WriteString("avatar_rows:\n")
+		for _, r := range avatarRows {
+			sb.WriteString("  - " + strconv.Quote(r) + "\n")
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString(`tiers:
+  - id: "rival"
+    name: "Rival"
+    min: -100
+    max: -25
+    behavior: "Trato cortante y desconfiado."
+  - id: "desconocido"
+    name: "Desconocido"
+    min: -24
+    max: 14
+    behavior: "Trato neutro y directo."
+  - id: "habitual"
+    name: "Habitual"
+    min: 15
+    max: 44
+    behavior: "Trato casual y cercano."
+  - id: "pana"
+    name: "Pana"
+    min: 45
+    max: 74
+    behavior: "Gran confianza y humor compartido."
+  - id: "favorito"
+    name: "Favorito"
+    min: 75
+    max: 100
+    behavior: "Máxima lealtad y complicidad."
+
+slots:
+  - id: "favorito_del_bot"
+    title: "Favorito del Canal"
+    max_holders: 1
+    min_affinity: 75
+    allow_outrank_steal: true
+`)
+	return os.WriteFile(path, []byte(sb.String()), 0644)
 }
 
 func promptField(reader *bufio.Reader, out io.Writer, label, current string, secret bool) (string, error) {
