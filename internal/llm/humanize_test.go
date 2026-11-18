@@ -23,8 +23,8 @@ func TestHumanizePrompts_MinimalMoodRoleAndStreamContext(t *testing.T) {
 	}
 
 	sysPrompt := llm.BuildSystemPromptWithLocale(spec, loc)
-	if !strings.Contains(sysPrompt, "PROHIBIDO sonar a asistente de IA") {
-		t.Fatalf("expected anti-AI rule in system prompt, got:\n%s", sysPrompt)
+	if !strings.Contains(sysPrompt, "SOUL.md") || !strings.Contains(sysPrompt, "PROHIBIDO sonar a asistente de IA") {
+		t.Fatalf("expected SOUL.md parent and anti-AI rule in system prompt, got:\n%s", sysPrompt)
 	}
 
 	userPrompt := llm.BuildUserPromptWithLocale(domain.PromptInput{

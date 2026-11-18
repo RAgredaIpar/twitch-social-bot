@@ -121,6 +121,9 @@ func BuildSystemPromptWithLocale(spec *domain.PersonaSpec, loc *i18n.Manager) st
 	}
 
 	var b strings.Builder
+	if soul := strings.TrimSpace(loc.Soul()); soul != "" {
+		b.WriteString(soul + "\n\n")
+	}
 	b.WriteString(loc.Get("llm_role_header") + "\n")
 	b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_bot_name_label"), spec.BotName))
 	b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_base_persona_label"), spec.BasePersona))
