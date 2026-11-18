@@ -3,6 +3,7 @@ package i18n_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/twitch-social-bot/internal/i18n"
@@ -68,5 +69,36 @@ func TestManager_UnknownLocaleReturnsError(t *testing.T) {
 	m, _ := i18n.NewManager("", "en")
 	if err := m.Set("zz"); err == nil {
 		t.Fatal("expected error for unknown Set locale")
+	}
+}
+
+func TestManager_SoulDiskAndFallback(t *testing.T) {
+	// Fallback without files on disk
+	root := t.TempDir()
+	locDir := filepath.Join(root, "locales")
+	if err := os.MkdirAll(locDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	m, err := i18n.NewManager(locDir, "es")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(m.Soul(), "SOUL.md") {
+		t.Fatalf("expected built-in Soul fallback, got: %q", m.Soul())
+	}
+
+	// Custom SOUL.es.md on disk overrides built-in
+	if err := os.WriteFile(filepath.Join(root, "SOUL.es.md"), []byte("Custom Spanish Soul"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "SOUL.md"), []byte("Custom English Soul"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Soul(); got != "Custom Spanish Soul" {
+		t.Fatalf("expected disk SOUL.es.md override, got %q", got)
+	}
+	_ = m.Set("en")
+	if got := m.Soul(); got != "Custom English Soul" {
+		t.Fatalf("expected disk SOUL.md override, got %q", got)
 	}
 }

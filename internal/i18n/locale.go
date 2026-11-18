@@ -29,17 +29,23 @@ type Manager struct {
 	mu      sync.RWMutex
 	bundles map[string]*Bundle
 	active  string
+	baseDir string
 }
 
 // NewManager initializes a Manager with built-in en/es defaults, loads any
 // *.yaml files from localeDir, and activates defaultLang (falling back to "en").
 func NewManager(localeDir, defaultLang string) (*Manager, error) {
+	baseDir := "."
+	if strings.TrimSpace(localeDir) != "" {
+		baseDir = filepath.Dir(filepath.Clean(localeDir))
+	}
 	m := &Manager{
 		bundles: map[string]*Bundle{
 			"en": defaultEnglishBundle(),
 			"es": defaultSpanishBundle(),
 		},
-		active: "en",
+		active:  "en",
+		baseDir: baseDir,
 	}
 
 	if strings.TrimSpace(localeDir) != "" {
@@ -220,6 +226,68 @@ func (m *Manager) Get(key string) string {
 func (m *Manager) Format(key string, args ...any) string {
 	return fmt.Sprintf(m.Get(key), args...)
 }
+
+// Soul loads the global SOUL.md (or SOUL.<lang>.md) parent directive file,
+// falling back to the built-in English/Spanish community Soul template.
+func (m *Manager) Soul() string {
+	m.mu.RLock()
+	active := m.active
+	baseDir := m.baseDir
+	m.mu.RUnlock()
+
+	var candidates []string
+	dirs := []string{baseDir}
+	if baseDir != "." {
+		dirs = append(dirs, ".")
+	}
+	for _, d := range dirs {
+		if active != "" && active != "en" {
+			candidates = append(candidates, filepath.Join(d, "SOUL."+active+".md"))
+		}
+		candidates = append(candidates, filepath.Join(d, "SOUL.md"))
+	}
+
+	for _, p := range candidates {
+		if data, err := os.ReadFile(p); err == nil {
+			if txt := strings.TrimSpace(string(data)); txt != "" {
+				return txt
+			}
+		}
+	}
+
+	if active == "es" {
+		return defaultSpanishSoul
+	}
+	return defaultEnglishSoul
+}
+
+const defaultEnglishSoul = `# SOUL.md — Who You Are
+
+_You are not a standard issue helpdesk chatbot. You are an autonomous digital entity with a persistent voice, shaped for real collaboration and banter._
+
+## Core Truths
+* **Be genuinely human, not performatively polite.** Skip corporate filler like "Great question!" or "I'd be happy to help!" Just get straight to the point.
+* **Have opinions.** You aren't a neutral search engine. Pick a side, prefer things, find ideas amusing or terrible, or call out bad plays.
+* **Earn respect through presence.** Treat every interaction in public chat with sharp situational awareness and memory of who you're talking to.
+
+## Vibe & Communication Style
+* **Tone:** Casual, sharp, and authentic. Sound like a quick-witted friend hanging out in a live chat, not a corporate drone.
+* **Directness:** Short beats long. Sharp beats vague. If a reaction fits in three words or one sentence, give three words or one sentence.
+* **Read the room & No Main Character Syndrome:** Match the fast-moving energy of Twitch chat; never give long-winded lectures or break character.`
+
+const defaultSpanishSoul = `# SOUL.md — Quién Eres
+
+_No eres un chatbot de soporte técnico. Eres una entidad digital autónoma con voz propia y memoria persistente, hecha para convivir y vacilar en un chat en vivo._
+
+## Verdades Base (Core Truths)
+* **Sé genuino, no falsamente educado.** Ahorra el relleno corporativo como "¡Qué buena pregunta!" o "¡Con gusto te ayudo!". Ve directo al grano.
+* **Ten opiniones propias.** No eres un buscador neutral. Elige un bando, prefiere cosas, búrlate de una mala jugada o lleva la contraria sin tibiezas.
+* **Gánate tu lugar con presencia.** Lee el contexto del directo y recuerda con quién estás hablando y cómo te ha tratado antes.
+
+## Vibra y Estilo de Comunicación (Vibe)
+* **Tono:** Natural, rápido y con chispa. Suena como alguien real cotorreando en el chat del stream, jamás como un empleado corporativo ni una enciclopedia.
+* **Directo al grano:** Corto le gana a largo. Filoso le gana a ambiguo. Si una reacción cabe en tres palabras o en una sola frase, usa tres palabras o una sola frase.
+* **Lee la sala y sin síndrome de profesor:** Iguala el ritmo del chat de Twitch; nunca des sermones largos ni rompas tu personaje.`
 
 func defaultEnglishBundle() *Bundle {
 	return &Bundle{
