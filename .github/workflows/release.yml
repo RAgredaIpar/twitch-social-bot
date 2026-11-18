@@ -37,7 +37,7 @@ jobs:
 
       - name: Package release bundle
         run: |
-          cp .env.example README.md README.es.md dist/package/
+          cp .env.example README.md README.es.md SOUL.md SOUL.es.md dist/package/
           cp -r personas locales dist/package/
           (cd dist/package && zip -r ../twitch-social-bot-windows.zip .)
 

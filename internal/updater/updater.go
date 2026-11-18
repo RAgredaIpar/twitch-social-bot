@@ -314,9 +314,10 @@ func installFromZip(zipPath, currentExe, workDir string) error {
 			continue
 		}
 
-		// Update personas/ and locales/ relative to workDir.
+		// Update personas/, locales/, and SOUL.*.md relative to workDir.
 		if strings.HasPrefix(clean, "personas"+string(filepath.Separator)) ||
-			strings.HasPrefix(clean, "locales"+string(filepath.Separator)) {
+			strings.HasPrefix(clean, "locales"+string(filepath.Separator)) ||
+			strings.HasPrefix(strings.ToUpper(clean), "SOUL.") {
 			dest := filepath.Join(workDir, clean)
 			if err := extractZipEntry(zf, dest, 0644); err != nil {
 				return err

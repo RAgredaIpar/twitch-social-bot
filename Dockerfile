@@ -32,6 +32,7 @@ RUN mkdir -p /app/data && chown -R botuser:botgroup /app
 COPY --from=builder /build/bot /app/bot
 COPY personas /app/personas
 COPY locales /app/locales
+COPY SOUL.md SOUL.es.md /app/
 
 USER botuser
 
