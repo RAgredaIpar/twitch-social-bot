@@ -15,6 +15,7 @@ import (
 
 	"github.com/twitch-social-bot/internal/domain"
 	"github.com/twitch-social-bot/internal/i18n"
+	"github.com/twitch-social-bot/internal/social"
 )
 
 // Ensure Client implements domain.LLMClient.
@@ -126,30 +127,71 @@ func BuildSystemPromptWithLocale(spec *domain.PersonaSpec, loc *i18n.Manager) st
 	}
 	b.WriteString(loc.Get("llm_role_header") + "\n")
 	b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_bot_name_label"), spec.BotName))
-	b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_base_persona_label"), spec.BasePersona))
+	if strings.TrimSpace(spec.BasePersona) != "" {
+		b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_base_persona_label"), spec.BasePersona))
+	}
+	if len(spec.Bio) > 0 {
+		b.WriteString(loc.Get("llm_bio_label") + ":\n")
+		for _, line := range spec.Bio {
+			b.WriteString("- " + line + "\n")
+		}
+	}
+	if len(spec.Adjectives) > 0 {
+		b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_adjectives_label"), strings.Join(spec.Adjectives, ", ")))
+	}
+	if len(spec.Topics) > 0 {
+		b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_topics_label"), strings.Join(spec.Topics, ", ")))
+	}
 	b.WriteString(loc.Get("llm_language_directive") + "\n\n")
 
-	b.WriteString(loc.Get("llm_tiers_header") + "\n")
-	sortedTiers := make([]domain.TierSpec, len(spec.Tiers))
-	copy(sortedTiers, spec.Tiers)
-	sort.SliceStable(sortedTiers, func(i, j int) bool {
-		return sortedTiers[i].Min < sortedTiers[j].Min
-	})
-	for _, t := range sortedTiers {
-		b.WriteString(fmt.Sprintf("- [%d, %d] %s (%s): %s\n", t.Min, t.Max, t.Name, t.ID, t.Behavior))
+	if len(spec.Lore) > 0 {
+		b.WriteString(loc.Get("llm_lore_header") + "\n")
+		for _, item := range spec.Lore {
+			b.WriteString("- " + item + "\n")
+		}
+		b.WriteString("\n")
 	}
-	b.WriteString("\n")
 
-	b.WriteString(loc.Get("llm_slots_header") + "\n")
-	sortedSlots := make([]domain.SlotSpec, len(spec.Slots))
-	copy(sortedSlots, spec.Slots)
-	sort.SliceStable(sortedSlots, func(i, j int) bool {
-		return sortedSlots[i].ID < sortedSlots[j].ID
-	})
-	for _, s := range sortedSlots {
-		b.WriteString(fmt.Sprintf("- %s: %s (max_holders: %d)\n", s.ID, s.Title, s.MaxHolders))
+	if len(spec.Style) > 0 {
+		b.WriteString(loc.Get("llm_style_header") + "\n")
+		for _, item := range spec.Style {
+			b.WriteString("- " + item + "\n")
+		}
+		b.WriteString("\n")
 	}
-	b.WriteString("\n")
+
+	if len(spec.MessageExamples) > 0 {
+		b.WriteString(loc.Get("llm_examples_header") + "\n")
+		for _, ex := range spec.MessageExamples {
+			b.WriteString(fmt.Sprintf("Viewer: %s\n%s: %s\n\n", ex.User, spec.BotName, ex.Reply))
+		}
+	}
+
+	if len(spec.Tiers) > 0 {
+		b.WriteString(loc.Get("llm_tiers_header") + "\n")
+		sortedTiers := make([]domain.TierSpec, len(spec.Tiers))
+		copy(sortedTiers, spec.Tiers)
+		sort.SliceStable(sortedTiers, func(i, j int) bool {
+			return sortedTiers[i].Min < sortedTiers[j].Min
+		})
+		for _, t := range sortedTiers {
+			b.WriteString(fmt.Sprintf("- [%d, %d] %s (%s): %s\n", t.Min, t.Max, t.Name, t.ID, t.Behavior))
+		}
+		b.WriteString("\n")
+	}
+
+	if len(spec.Slots) > 0 {
+		b.WriteString(loc.Get("llm_slots_header") + "\n")
+		sortedSlots := make([]domain.SlotSpec, len(spec.Slots))
+		copy(sortedSlots, spec.Slots)
+		sort.SliceStable(sortedSlots, func(i, j int) bool {
+			return sortedSlots[i].ID < sortedSlots[j].ID
+		})
+		for _, s := range sortedSlots {
+			b.WriteString(fmt.Sprintf("- %s: %s (max_holders: %d)\n", s.ID, s.Title, s.MaxHolders))
+		}
+		b.WriteString("\n")
+	}
 
 	b.WriteString(loc.Get("llm_rules_header") + "\n")
 	b.WriteString(loc.Get("llm_rule_1") + "\n")
@@ -237,7 +279,8 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 		b.WriteString("- Earned Title: none\n")
 	}
 	if len(input.Profile.Facts) > 0 {
-		b.WriteString(fmt.Sprintf("- Facts: %s\n", strings.Join(input.Profile.Facts, "; ")))
+		relevantFacts := social.SelectRelevantFacts(input.Profile.Facts, input.ViewerMessage, 5, 3)
+		b.WriteString(fmt.Sprintf("- Facts: %s\n", strings.Join(relevantFacts, "; ")))
 	} else {
 		b.WriteString(fmt.Sprintf("- Facts: %s\n", loc.Get("llm_user_no_facts")))
 	}

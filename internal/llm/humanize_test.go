@@ -61,3 +61,53 @@ func TestHumanizePrompts_MinimalMoodRoleAndStreamContext(t *testing.T) {
 		}
 	}
 }
+
+func TestElizaOSPromptAndVectorFactSelection(t *testing.T) {
+	loc, err := i18n.NewManager(filepath.Join("..", "..", "locales"), "es")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	organicSpec := &domain.PersonaSpec{
+		ID:         "cipher",
+		BotName:    "Cipher",
+		Bio:        []string{"Experto cínico de sistemas"},
+		Lore:       []string{"Desconfía de los discos locales"},
+		Adjectives: []string{"directo", "seco"},
+		Topics:     []string{"ciberseguridad"},
+		Style:      []string{"Usa minúsculas"},
+		MessageExamples: []domain.MessageExample{
+			{User: "hola", Reply: "al grano, qué pasó"},
+		},
+	}
+
+	sysPrompt := llm.BuildSystemPromptWithLocale(organicSpec, loc)
+	for _, want := range []string{"Biografía:", "[LORE Y TRASFONDO]", "[ESTILO DE ESCRITURA DEL PERSONAJE]", "[EJEMPLOS REALES DE DIÁLOGO]", "Cipher: al grano, qué pasó"} {
+		if !strings.Contains(sysPrompt, want) {
+			t.Fatalf("expected %q in system prompt, got:\n%s", want, sysPrompt)
+		}
+	}
+	if strings.Contains(sysPrompt, "[NIVELES DE AFINIDAD]") || strings.Contains(sysPrompt, "[PUESTOS SOCIALES Y TÍTULOS]") {
+		t.Fatalf("expected tiers and slots omitted for organic persona, got:\n%s", sysPrompt)
+	}
+
+	facts := []string{"Tiene un gato llamado Michi"}
+	for i := 0; i < 20; i++ {
+		facts = append(facts, "Le gusta el café negro por las mañanas")
+	}
+	facts = append(facts, "Llegó tarde hoy al directo")
+
+	userPrompt := llm.BuildUserPromptWithLocale(domain.PromptInput{
+		Persona:       organicSpec,
+		Profile:       domain.ViewerProfile{UserID: "u1", Username: "u1", DisplayName: "U1", Facts: facts},
+		CurrentTier:   domain.TierSpec{ID: "neutral", Name: "Neutral", Behavior: "Natural"},
+		ViewerMessage: "mi gatito está durmiendo",
+	}, loc)
+
+	if !strings.Contains(userPrompt, "Tiene un gato llamado Michi") {
+		t.Fatalf("expected vector-selected cat fact in user prompt, got:\n%s", userPrompt)
+	}
+	if !strings.Contains(userPrompt, "Llegó tarde hoy al directo") {
+		t.Fatalf("expected recent fact in user prompt, got:\n%s", userPrompt)
+	}
+}
