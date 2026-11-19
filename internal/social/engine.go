@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	DefaultMaxViewerFacts = 15
+	DefaultMaxViewerFacts = 150
 	MaxRecentTurns        = 4
 	MaxEarnedTitleRunes   = 60
 )
@@ -36,11 +36,23 @@ func clamp(val, min, max int) int {
 }
 
 func (e *Engine) ResolveTier(spec *domain.PersonaSpec, affinity int) domain.TierSpec {
-	if spec == nil || len(spec.Tiers) == 0 {
+	if spec == nil {
 		return domain.TierSpec{}
 	}
-
 	aff := clamp(affinity, -100, 100)
+	if len(spec.Tiers) == 0 {
+		switch {
+		case aff <= -25:
+			return domain.TierSpec{ID: "hostil", Name: "Hostil", Min: -100, Max: -25, Behavior: "Recela y responde cortante."}
+		case aff < 15:
+			return domain.TierSpec{ID: "neutral", Name: "Neutral", Min: -24, Max: 14, Behavior: "Trato natural de chat."}
+		case aff < 60:
+			return domain.TierSpec{ID: "cercano", Name: "Cercano", Min: 15, Max: 59, Behavior: "Complicidad y confianza habitual."}
+		default:
+			return domain.TierSpec{ID: "intimo", Name: "Íntimo", Min: 60, Max: 100, Behavior: "Máxima cercanía y lealtad."}
+		}
+	}
+
 	for _, tier := range spec.Tiers {
 		if aff >= tier.Min && aff <= tier.Max {
 			return tier

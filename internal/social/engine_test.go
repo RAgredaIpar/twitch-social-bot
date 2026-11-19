@@ -200,9 +200,9 @@ func TestApplyDecision_FactsFIFOAndDeduplication(t *testing.T) {
 		t.Fatalf("expected 2 facts after dup attempt, got %d", len(resDup.Facts))
 	}
 
-	// Adding facts up to max (default 15) and FIFO eviction
+	// Adding facts up to max (default 150) and FIFO eviction
 	var initialFacts []string
-	for i := 1; i <= 15; i++ {
+	for i := 1; i <= social.DefaultMaxViewerFacts; i++ {
 		initialFacts = append(initialFacts, strings.Repeat("F", i))
 	}
 	p := domain.ViewerProfile{
@@ -215,7 +215,7 @@ func TestApplyDecision_FactsFIFOAndDeduplication(t *testing.T) {
 	if len(resFIFO.Facts) != social.DefaultMaxViewerFacts {
 		t.Fatalf("expected %d facts, got %d", social.DefaultMaxViewerFacts, len(resFIFO.Facts))
 	}
-	if resFIFO.Facts[0] != initialFacts[1] || resFIFO.Facts[14] != "F_Nuevo" {
+	if resFIFO.Facts[0] != initialFacts[1] || resFIFO.Facts[social.DefaultMaxViewerFacts-1] != "F_Nuevo" {
 		t.Fatalf("expected FIFO eviction (F2..F_Nuevo), got %+v", resFIFO.Facts)
 	}
 

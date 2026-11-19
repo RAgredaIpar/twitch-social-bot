@@ -125,7 +125,7 @@ func LoadRaw(envFile string) (*Config, error) {
 	}
 	cfg.RoomBufferSize = rbSize
 
-	mvfStr := get("MAX_VIEWER_FACTS", "15")
+	mvfStr := get("MAX_VIEWER_FACTS", "150")
 	mvf, err := strconv.Atoi(mvfStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid MAX_VIEWER_FACTS value: %q", mvfStr)

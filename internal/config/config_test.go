@@ -121,8 +121,8 @@ func TestConfig_Defaults(t *testing.T) {
 	if cfg.RoomBufferSize != 25 {
 		t.Errorf("expected RoomBufferSize 25, got %d", cfg.RoomBufferSize)
 	}
-	if cfg.MaxViewerFacts != 15 {
-		t.Errorf("expected MaxViewerFacts 15, got %d", cfg.MaxViewerFacts)
+	if cfg.MaxViewerFacts != 150 {
+		t.Errorf("expected MaxViewerFacts 150, got %d", cfg.MaxViewerFacts)
 	}
 	if cfg.RoomBufferMaxAge != 10*time.Minute {
 		t.Errorf("expected RoomBufferMaxAge 10m, got %v", cfg.RoomBufferMaxAge)
