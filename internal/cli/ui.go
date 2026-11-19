@@ -677,55 +677,23 @@ func writeCustomPersonaYAML(path, id, name, botName, themeColor, desc string, av
 	if themeColor != "" {
 		sb.WriteString(fmt.Sprintf("theme_color: %s\n", strconv.Quote(themeColor)))
 	}
-	sb.WriteString("trigger_prefix: \"!bot\"\n")
-	sb.WriteString("max_positive_delta: 5\n")
-	sb.WriteString("max_negative_delta: -8\n\n")
-	sb.WriteString("base_persona: |\n")
+	sb.WriteString("trigger_prefix: \"!bot\"\n\n")
+	sb.WriteString("bio:\n")
 	for _, line := range strings.Split(desc, "\n") {
-		sb.WriteString("  " + strings.TrimSpace(line) + "\n")
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			sb.WriteString("  - " + strconv.Quote(trimmed) + "\n")
+		}
 	}
-	sb.WriteString("\nblocked_words:\n  - \"toxicidad_extrema\"\n  - \"insulto_grave\"\n\n")
+	sb.WriteString("\nstyle:\n")
+	sb.WriteString("  - \"Habla de forma natural, directa y en personaje como en un chat real de Twitch.\"\n")
+	sb.WriteString("\nblocked_words:\n  - \"toxicidad_extrema\"\n  - \"insulto_grave\"\n")
 	if len(avatarRows) > 0 {
-		sb.WriteString("avatar_rows:\n")
+		sb.WriteString("\navatar_rows:\n")
 		for _, r := range avatarRows {
 			sb.WriteString("  - " + strconv.Quote(r) + "\n")
 		}
-		sb.WriteString("\n")
 	}
-	sb.WriteString(`tiers:
-  - id: "rival"
-    name: "Rival"
-    min: -100
-    max: -25
-    behavior: "Trato cortante y desconfiado."
-  - id: "desconocido"
-    name: "Desconocido"
-    min: -24
-    max: 14
-    behavior: "Trato neutro y directo."
-  - id: "habitual"
-    name: "Habitual"
-    min: 15
-    max: 44
-    behavior: "Trato casual y cercano."
-  - id: "pana"
-    name: "Pana"
-    min: 45
-    max: 74
-    behavior: "Gran confianza y humor compartido."
-  - id: "favorito"
-    name: "Favorito"
-    min: 75
-    max: 100
-    behavior: "Máxima lealtad y complicidad."
-
-slots:
-  - id: "favorito_del_bot"
-    title: "Favorito del Canal"
-    max_holders: 1
-    min_affinity: 75
-    allow_outrank_steal: true
-`)
 	return os.WriteFile(path, []byte(sb.String()), 0644)
 }
 
