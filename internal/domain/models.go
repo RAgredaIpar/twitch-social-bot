@@ -71,20 +71,31 @@ type SlotHolder struct {
 	AssignedAt  time.Time `json:"assigned_at"`
 }
 
+type MessageExample struct {
+	User  string `json:"user"`
+	Reply string `json:"reply"`
+}
+
 type PersonaSpec struct {
-	ID               string     `json:"id"`
-	Name             string     `json:"name"`
-	BotName          string     `json:"bot_name"`
-	TriggerPrefix    string     `json:"trigger_prefix"`
-	MaxPositiveDelta int        `json:"max_positive_delta"`
-	MaxNegativeDelta int        `json:"max_negative_delta"`
-	BasePersona      string     `json:"base_persona"`
-	BlockedWords     []string   `json:"blocked_words"`
-	MaxViewerFacts   int        `json:"max_viewer_facts,omitempty"`
-	ThemeColor       string     `json:"theme_color,omitempty"`
-	AvatarRows       []string   `json:"avatar_rows,omitempty"`
-	Tiers            []TierSpec `json:"tiers"`
-	Slots            []SlotSpec `json:"slots"`
+	ID               string           `json:"id"`
+	Name             string           `json:"name"`
+	BotName          string           `json:"bot_name"`
+	TriggerPrefix    string           `json:"trigger_prefix"`
+	MaxPositiveDelta int              `json:"max_positive_delta"`
+	MaxNegativeDelta int              `json:"max_negative_delta"`
+	BasePersona      string           `json:"base_persona"`
+	Bio              []string         `json:"bio,omitempty"`
+	Lore             []string         `json:"lore,omitempty"`
+	Adjectives       []string         `json:"adjectives,omitempty"`
+	Topics           []string         `json:"topics,omitempty"`
+	Style            []string         `json:"style,omitempty"`
+	MessageExamples  []MessageExample `json:"message_examples,omitempty"`
+	BlockedWords     []string         `json:"blocked_words"`
+	MaxViewerFacts   int              `json:"max_viewer_facts,omitempty"`
+	ThemeColor       string           `json:"theme_color,omitempty"`
+	AvatarRows       []string         `json:"avatar_rows,omitempty"`
+	Tiers            []TierSpec       `json:"tiers"`
+	Slots            []SlotSpec       `json:"slots"`
 }
 
 type LLMDecision struct {

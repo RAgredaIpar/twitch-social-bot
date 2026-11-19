@@ -212,11 +212,16 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("missing BasePersona", func(t *testing.T) {
+	t.Run("missing BasePersona and Bio", func(t *testing.T) {
 		s := baseValid()
 		s.BasePersona = ""
+		s.Bio = nil
 		if err := persona.Validate(s); err == nil {
-			t.Errorf("expected error for missing BasePersona")
+			t.Errorf("expected error when both BasePersona and Bio are missing")
+		}
+		s.Bio = []string{"Organic ElizaOS bio line"}
+		if err := persona.Validate(s); err != nil {
+			t.Errorf("expected valid spec when Bio is provided, got: %v", err)
 		}
 	})
 
@@ -236,11 +241,11 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("empty Tiers", func(t *testing.T) {
+	t.Run("empty Tiers allowed for organic personas", func(t *testing.T) {
 		s := baseValid()
 		s.Tiers = nil
-		if err := persona.Validate(s); err == nil {
-			t.Errorf("expected error for empty Tiers")
+		if err := persona.Validate(s); err != nil {
+			t.Errorf("expected empty Tiers to be allowed, got: %v", err)
 		}
 	})
 
@@ -634,6 +639,54 @@ func TestProductionTemplates(t *testing.T) {
 			if err := persona.Validate(spec); err != nil {
 				t.Errorf("template validation failed: %v", err)
 			}
+			if len(spec.Bio) == 0 || len(spec.Lore) == 0 || len(spec.Style) == 0 || len(spec.MessageExamples) == 0 {
+				t.Errorf("expected ElizaOS fields populated in %s", tc.filename)
+			}
 		})
+	}
+}
+
+func TestParseYAML_OrganicElizaOSPersonaWithoutTiersOrSlots(t *testing.T) {
+	yamlData := []byte(`
+id: "cipher_organic"
+name: "Cipher"
+bot_name: "CipherBot"
+
+bio:
+  - "Auditor de seguridad cínico y directo."
+  - "Odia el hype vacío."
+
+lore:
+  - "Perdió su disco duro en 2014."
+
+adjectives:
+  - "cínico"
+  - "técnico"
+
+topics:
+  - "criptografía"
+
+style:
+  - "Nunca uses signos de exclamación."
+
+message_examples:
+  - user: "hola cipher"
+    reply: "qué quieres, sé breve"
+  - user: "es seguro esto?"
+    reply: "ni de broma sin revisión previa"
+`)
+
+	spec, err := persona.ParseYAML(yamlData)
+	if err != nil {
+		t.Fatalf("expected valid organic ElizaOS YAML without tiers/slots, got: %v", err)
+	}
+	if len(spec.Bio) != 2 || len(spec.Lore) != 1 || len(spec.Adjectives) != 2 || len(spec.Topics) != 1 || len(spec.Style) != 1 || len(spec.MessageExamples) != 2 {
+		t.Fatalf("unexpected ElizaOS parsed lengths: %+v", spec)
+	}
+	if spec.MessageExamples[0].User != "hola cipher" || spec.MessageExamples[1].Reply != "ni de broma sin revisión previa" {
+		t.Fatalf("unexpected message examples: %+v", spec.MessageExamples)
+	}
+	if len(spec.Tiers) != 0 || len(spec.Slots) != 0 {
+		t.Fatalf("expected empty tiers and slots, got %d tiers, %d slots", len(spec.Tiers), len(spec.Slots))
 	}
 }

@@ -51,7 +51,11 @@ func ParseYAML(data []byte) (*domain.PersonaSpec, error) {
 
 func parseYAMLContent(content string) (*domain.PersonaSpec, error) {
 	rawLines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	spec := &domain.PersonaSpec{}
+	spec := &domain.PersonaSpec{
+		TriggerPrefix:    "!bot",
+		MaxPositiveDelta: 5,
+		MaxNegativeDelta: -8,
+	}
 
 	i := 0
 	for i < len(rawLines) {
@@ -148,47 +152,37 @@ func parseYAMLContent(content string) (*domain.PersonaSpec, error) {
 				i++
 			}
 		case "blocked_words":
-			i++
-			for i < len(rawLines) {
-				bLine := rawLines[i]
-				bTrimmed := strings.TrimSpace(bLine)
-				if bTrimmed == "" || strings.HasPrefix(bTrimmed, "#") {
-					i++
-					continue
-				}
-				if countIndent(bLine) == 0 {
-					break
-				}
-				bClean := strings.TrimSpace(stripComment(bLine))
-				if strings.HasPrefix(bClean, "-") {
-					word := strings.TrimSpace(bClean[1:])
-					spec.BlockedWords = append(spec.BlockedWords, unquoteString(word))
-				}
-				i++
-			}
+			items, nextIdx := parseStringList(rawLines, i+1, true)
+			spec.BlockedWords = append(spec.BlockedWords, items...)
+			i = nextIdx
+		case "bio":
+			items, nextIdx := parseStringList(rawLines, i+1, true)
+			spec.Bio = append(spec.Bio, items...)
+			i = nextIdx
+		case "lore":
+			items, nextIdx := parseStringList(rawLines, i+1, true)
+			spec.Lore = append(spec.Lore, items...)
+			i = nextIdx
+		case "adjectives":
+			items, nextIdx := parseStringList(rawLines, i+1, true)
+			spec.Adjectives = append(spec.Adjectives, items...)
+			i = nextIdx
+		case "topics":
+			items, nextIdx := parseStringList(rawLines, i+1, true)
+			spec.Topics = append(spec.Topics, items...)
+			i = nextIdx
+		case "style":
+			items, nextIdx := parseStringList(rawLines, i+1, true)
+			spec.Style = append(spec.Style, items...)
+			i = nextIdx
+		case "message_examples":
+			examples, nextIdx := parseMessageExamples(rawLines, i+1)
+			spec.MessageExamples = append(spec.MessageExamples, examples...)
+			i = nextIdx
 		case "avatar_rows":
-			i++
-			for i < len(rawLines) {
-				aLine := rawLines[i]
-				aTrimmed := strings.TrimSpace(aLine)
-				if aTrimmed == "" || strings.HasPrefix(aTrimmed, "#") {
-					i++
-					continue
-				}
-				if countIndent(aLine) == 0 {
-					break
-				}
-				aClean := strings.TrimSpace(aLine)
-				if strings.HasPrefix(aClean, "-") {
-					item := strings.TrimSpace(aClean[1:])
-					if unq, uErr := strconv.Unquote(item); uErr == nil {
-						spec.AvatarRows = append(spec.AvatarRows, unq)
-					} else {
-						spec.AvatarRows = append(spec.AvatarRows, unquoteString(item))
-					}
-				}
-				i++
-			}
+			items, nextIdx := parseStringList(rawLines, i+1, false)
+			spec.AvatarRows = append(spec.AvatarRows, items...)
+			i = nextIdx
 		case "tiers":
 			i++
 			tiers, nextIdx, err := parseTiers(rawLines, i)
@@ -517,8 +511,8 @@ func Validate(spec *domain.PersonaSpec) error {
 	if strings.TrimSpace(spec.TriggerPrefix) == "" {
 		return errors.New("persona trigger_prefix is required")
 	}
-	if strings.TrimSpace(spec.BasePersona) == "" {
-		return errors.New("persona base_persona is required")
+	if strings.TrimSpace(spec.BasePersona) == "" && len(spec.Bio) == 0 {
+		return errors.New("persona base_persona or bio is required")
 	}
 	if spec.MaxPositiveDelta <= 0 {
 		return fmt.Errorf("max_positive_delta must be > 0, got %d", spec.MaxPositiveDelta)
@@ -526,54 +520,53 @@ func Validate(spec *domain.PersonaSpec) error {
 	if spec.MaxNegativeDelta >= 0 {
 		return fmt.Errorf("max_negative_delta must be < 0, got %d", spec.MaxNegativeDelta)
 	}
-	if len(spec.Tiers) == 0 {
-		return errors.New("persona must define at least one tier")
-	}
 
-	// Validate Tiers continuously cover [-100, 100] without gaps or overlaps
-	sortedTiers := make([]domain.TierSpec, len(spec.Tiers))
-	copy(sortedTiers, spec.Tiers)
-	sort.Slice(sortedTiers, func(i, j int) bool {
-		return sortedTiers[i].Min < sortedTiers[j].Min
-	})
+	if len(spec.Tiers) > 0 {
+		// Validate Tiers continuously cover [-100, 100] without gaps or overlaps
+		sortedTiers := make([]domain.TierSpec, len(spec.Tiers))
+		copy(sortedTiers, spec.Tiers)
+		sort.Slice(sortedTiers, func(i, j int) bool {
+			return sortedTiers[i].Min < sortedTiers[j].Min
+		})
 
-	tierIDs := make(map[string]bool)
-	for i, t := range sortedTiers {
-		if strings.TrimSpace(t.ID) == "" {
-			return fmt.Errorf("tier at index %d has empty id", i)
-		}
-		if tierIDs[t.ID] {
-			return fmt.Errorf("duplicate tier id: %s", t.ID)
-		}
-		tierIDs[t.ID] = true
-
-		if strings.TrimSpace(t.Name) == "" {
-			return fmt.Errorf("tier %q has empty name", t.ID)
-		}
-		if strings.TrimSpace(t.Behavior) == "" {
-			return fmt.Errorf("tier %q has empty behavior", t.ID)
-		}
-		if t.Min > t.Max {
-			return fmt.Errorf("tier %q min (%d) is greater than max (%d)", t.ID, t.Min, t.Max)
-		}
-
-		if i == 0 {
-			if t.Min != -100 {
-				return fmt.Errorf("first tier %q must start at -100, got %d", t.ID, t.Min)
+		tierIDs := make(map[string]bool)
+		for i, t := range sortedTiers {
+			if strings.TrimSpace(t.ID) == "" {
+				return fmt.Errorf("tier at index %d has empty id", i)
 			}
-		} else {
-			prevMax := sortedTiers[i-1].Max
-			if t.Min <= prevMax {
-				return fmt.Errorf("tier overlap between %q (ends at %d) and %q (starts at %d)", sortedTiers[i-1].ID, prevMax, t.ID, t.Min)
+			if tierIDs[t.ID] {
+				return fmt.Errorf("duplicate tier id: %s", t.ID)
 			}
-			if t.Min > prevMax+1 {
-				return fmt.Errorf("tier gap between %q (ends at %d) and %q (starts at %d)", sortedTiers[i-1].ID, prevMax, t.ID, t.Min)
+			tierIDs[t.ID] = true
+
+			if strings.TrimSpace(t.Name) == "" {
+				return fmt.Errorf("tier %q has empty name", t.ID)
+			}
+			if strings.TrimSpace(t.Behavior) == "" {
+				return fmt.Errorf("tier %q has empty behavior", t.ID)
+			}
+			if t.Min > t.Max {
+				return fmt.Errorf("tier %q min (%d) is greater than max (%d)", t.ID, t.Min, t.Max)
+			}
+
+			if i == 0 {
+				if t.Min != -100 {
+					return fmt.Errorf("first tier %q must start at -100, got %d", t.ID, t.Min)
+				}
+			} else {
+				prevMax := sortedTiers[i-1].Max
+				if t.Min <= prevMax {
+					return fmt.Errorf("tier overlap between %q (ends at %d) and %q (starts at %d)", sortedTiers[i-1].ID, prevMax, t.ID, t.Min)
+				}
+				if t.Min > prevMax+1 {
+					return fmt.Errorf("tier gap between %q (ends at %d) and %q (starts at %d)", sortedTiers[i-1].ID, prevMax, t.ID, t.Min)
+				}
 			}
 		}
-	}
 
-	if sortedTiers[len(sortedTiers)-1].Max != 100 {
-		return fmt.Errorf("last tier %q must end at 100, got %d", sortedTiers[len(sortedTiers)-1].ID, sortedTiers[len(sortedTiers)-1].Max)
+		if sortedTiers[len(sortedTiers)-1].Max != 100 {
+			return fmt.Errorf("last tier %q must end at 100, got %d", sortedTiers[len(sortedTiers)-1].ID, sortedTiers[len(sortedTiers)-1].Max)
+		}
 	}
 
 	// Validate Slots
@@ -776,8 +769,28 @@ func clonePersona(s *domain.PersonaSpec) *domain.PersonaSpec {
 	}
 	c := *s
 	if s.BlockedWords != nil {
-		c.BlockedWords = make([]string, len(s.BlockedWords))
-		copy(c.BlockedWords, s.BlockedWords)
+		c.BlockedWords = append([]string(nil), s.BlockedWords...)
+	}
+	if s.Bio != nil {
+		c.Bio = append([]string(nil), s.Bio...)
+	}
+	if s.Lore != nil {
+		c.Lore = append([]string(nil), s.Lore...)
+	}
+	if s.Adjectives != nil {
+		c.Adjectives = append([]string(nil), s.Adjectives...)
+	}
+	if s.Topics != nil {
+		c.Topics = append([]string(nil), s.Topics...)
+	}
+	if s.Style != nil {
+		c.Style = append([]string(nil), s.Style...)
+	}
+	if s.MessageExamples != nil {
+		c.MessageExamples = append([]domain.MessageExample(nil), s.MessageExamples...)
+	}
+	if s.AvatarRows != nil {
+		c.AvatarRows = append([]string(nil), s.AvatarRows...)
 	}
 	if s.Tiers != nil {
 		c.Tiers = make([]domain.TierSpec, len(s.Tiers))
@@ -799,4 +812,82 @@ func clonePersona(s *domain.PersonaSpec) *domain.PersonaSpec {
 		}
 	}
 	return &c
+}
+
+func parseStringList(rawLines []string, startIdx int, stripComments bool) ([]string, int) {
+	var items []string
+	i := startIdx
+	for i < len(rawLines) {
+		line := rawLines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			i++
+			continue
+		}
+		if countIndent(line) == 0 {
+			break
+		}
+		clean := strings.TrimSpace(line)
+		if stripComments {
+			clean = strings.TrimSpace(stripComment(line))
+		}
+		if strings.HasPrefix(clean, "-") {
+			rawVal := strings.TrimSpace(clean[1:])
+			if !stripComments {
+				if unq, err := strconv.Unquote(rawVal); err == nil {
+					items = append(items, unq)
+					i++
+					continue
+				}
+			}
+			items = append(items, unquoteString(rawVal))
+		}
+		i++
+	}
+	return items, i
+}
+
+func parseMessageExamples(rawLines []string, startIdx int) ([]domain.MessageExample, int) {
+	var examples []domain.MessageExample
+	var cur *domain.MessageExample
+	flush := func() {
+		if cur != nil && (strings.TrimSpace(cur.User) != "" || strings.TrimSpace(cur.Reply) != "") {
+			examples = append(examples, *cur)
+		}
+		cur = nil
+	}
+
+	i := startIdx
+	for i < len(rawLines) {
+		line := rawLines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			i++
+			continue
+		}
+		if countIndent(line) == 0 {
+			break
+		}
+		clean := strings.TrimSpace(stripComment(line))
+		if strings.HasPrefix(clean, "-") {
+			flush()
+			cur = &domain.MessageExample{}
+			clean = strings.TrimSpace(clean[1:])
+		}
+		if cur != nil {
+			if colonIdx := strings.Index(clean, ":"); colonIdx != -1 {
+				k := strings.TrimSpace(clean[:colonIdx])
+				v := unquoteString(strings.TrimSpace(clean[colonIdx+1:]))
+				switch k {
+				case "user":
+					cur.User = v
+				case "reply":
+					cur.Reply = v
+				}
+			}
+		}
+		i++
+	}
+	flush()
+	return examples, i
 }
