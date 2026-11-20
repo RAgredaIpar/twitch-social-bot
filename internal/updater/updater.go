@@ -66,13 +66,42 @@ func (c *Config) defaults() {
 	}
 }
 
+const (
+	cleanupRetryAttempts = 20
+	cleanupRetryInterval = 150 * time.Millisecond
+)
+
 // CleanupOldBinary removes any leftover .old executable from a prior Windows self-update.
+// If the prior updater process is still exiting, removal retries briefly in the background.
 func CleanupOldBinary() {
 	exe, err := os.Executable()
 	if err != nil {
 		return
 	}
-	_ = os.Remove(exe + ".old")
+	CleanupPathWithRetry(exe+".old", cleanupRetryAttempts, cleanupRetryInterval)
+}
+
+// CleanupPathWithRetry removes targetPath if present, retrying briefly in the background
+// when the OS still holds a transient lock (such as a parent Windows .exe.old exiting).
+func CleanupPathWithRetry(targetPath string, attempts int, delay time.Duration) {
+	err := os.Remove(targetPath)
+	if err == nil || os.IsNotExist(err) {
+		return
+	}
+	if attempts <= 1 {
+		return
+	}
+	if delay <= 0 {
+		delay = 100 * time.Millisecond
+	}
+	go func() {
+		for i := 1; i < attempts; i++ {
+			time.Sleep(delay)
+			if err := os.Remove(targetPath); err == nil || os.IsNotExist(err) {
+				return
+			}
+		}
+	}()
 }
 
 // Check inspects either the local git repository or GitHub Releases for a newer version.
@@ -389,24 +418,24 @@ func moveFile(src, dst string) error {
 	return nil
 }
 
-// Relaunch starts a fresh process of the updated bot attached to standard I/O and waits for it.
+// Relaunch starts a fresh process of the updated bot. On Windows it opens the updated
+// binary in a detached console so the replaced .exe.old exits and can be cleaned up automatically.
 func Relaunch(args []string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
 
-	var cmd *exec.Cmd
 	if isGoRunExecutable(exe) {
 		cmdArgs := append([]string{"run", "./cmd/bot"}, args...)
-		cmd = exec.Command("go", cmdArgs...)
-	} else {
-		cmd = exec.Command(exe, args...)
+		cmd := exec.Command("go", cmdArgs...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	}
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+
+	return relaunchBinary(exe, args)
 }
 
 func isGoRunExecutable(exe string) bool {

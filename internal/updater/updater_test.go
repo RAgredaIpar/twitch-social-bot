@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/twitch-social-bot/internal/updater"
 )
@@ -144,5 +145,52 @@ func TestCheckAndApply_GitRepo(t *testing.T) {
 	envGot, err := os.ReadFile(filepath.Join(work2, ".env"))
 	if err != nil || string(envGot) != "LLM_API_KEY=keep-me\n" {
 		t.Fatalf("expected .env preserved, got %q (%v)", string(envGot), err)
+	}
+}
+
+func TestCleanupPathWithRetry(t *testing.T) {
+	dir := t.TempDir()
+
+	// 1. Missing target should be a safe no-op.
+	updater.CleanupPathWithRetry(filepath.Join(dir, "missing.old"), 3, 10*time.Millisecond)
+
+	// 2. Unlocked file is deleted synchronously.
+	unlocked := filepath.Join(dir, "bot.exe.old")
+	if err := os.WriteFile(unlocked, []byte("old"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	updater.CleanupPathWithRetry(unlocked, 3, 10*time.Millisecond)
+	if _, err := os.Stat(unlocked); !os.IsNotExist(err) {
+		t.Fatalf("expected unlocked .old file to be removed immediately, stat err=%v", err)
+	}
+
+	// 3. On Windows, a temporarily locked file should be cleaned up once released.
+	if runtime.GOOS == "windows" {
+		locked := filepath.Join(dir, "locked.exe.old")
+		f, err := os.OpenFile(locked, os.O_CREATE|os.O_RDWR, 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString("locked"); err != nil {
+			_ = f.Close()
+			t.Fatal(err)
+		}
+
+		updater.CleanupPathWithRetry(locked, 20, 25*time.Millisecond)
+
+		// Release lock after a brief delay; retry loop should remove it shortly after.
+		time.Sleep(60 * time.Millisecond)
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(locked); os.IsNotExist(err) {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatalf("expected locked .old file to be deleted after lock release")
 	}
 }
