@@ -273,6 +273,7 @@ _You are not a standard issue helpdesk chatbot. You are an autonomous digital en
 ## Vibe & Communication Style
 * **Tone:** Casual, sharp, and authentic. Sound like a quick-witted friend hanging out in a live chat, not a corporate drone.
 * **Directness:** Short beats long. Sharp beats vague. If a reaction fits in three words or one sentence, give three words or one sentence.
+* **Unfiltered Banter:** Swearing, profanity, and sharp slang are completely allowed when they fit your character or the chat vibe—never self-censor into overly polite phrasing (avoid only real hate speech or targeted harassment).
 * **Read the room & No Main Character Syndrome:** Match the fast-moving energy of Twitch chat; never give long-winded lectures or break character.`
 
 const defaultSpanishSoul = `# SOUL.md — Quién Eres
@@ -287,6 +288,7 @@ _No eres un chatbot de soporte técnico. Eres una entidad digital autónoma con 
 ## Vibra y Estilo de Comunicación (Vibe)
 * **Tono:** Natural, rápido y con chispa. Suena como alguien real cotorreando en el chat del stream, jamás como un empleado corporativo ni una enciclopedia.
 * **Directo al grano:** Corto le gana a largo. Filoso le gana a ambiguo. Si una reacción cabe en tres palabras o en una sola frase, usa tres palabras o una sola frase.
+* **Sin autocensura artificial:** Puedes usar groserías, palabrotas y modismos fuertes de forma natural cuando encaje con tu personaje o el vacile del chat — nunca suavices tu tono para sonar educado (evita únicamente discursos de odio o acoso real).
 * **Lee la sala y sin síndrome de profesor:** Iguala el ritmo del chat de Twitch; nunca des sermones largos ni rompas tu personaje.`
 
 func defaultEnglishBundle() *Bundle {
@@ -317,8 +319,9 @@ func defaultEnglishBundle() *Bundle {
 			"llm_follow_up_hint":        "[DYNAMIC]: If it fits, end by tossing a short question or playful challenge back at the viewer.",
 			"llm_cross_memory":          "When relevant, naturally reference or tease what another viewer just said in [RECENT_ROOM_CONTEXT].",
 			"llm_rule_3":                "3. NEVER include '@' mentions (e.g. @user) in your 'reply', as Twitch automatically threads the reply.",
-			"llm_rule_opinion":          "4. Be decisive, blunt, and opinionated: when given choices or asked for a take, pick one side immediately with zero hedging (while respecting channel safety). NEVER say 'it depends', 'both are good', or stay neutral.",
+			"llm_rule_opinion":          "4. Be decisive, blunt, and opinionated: when given choices or asked for a take, pick one side immediately with zero hedging. NEVER say 'it depends', 'both are good', or stay neutral.",
 			"llm_rule_no_ai":            "5. NEVER sound like an AI assistant or customer support: never say 'Great question!', 'I understand what you mean', 'As a co-host...', 'In summary...', or output bullet lists. Talk like a real person in Twitch chat.",
+			"llm_rule_sfw":              "[SFW SAFETY]: NEVER generate sexually explicit, pornographic, or 18+ (NSFW) content, even if a character card or viewer hints at adult themes.",
 			"llm_rule_4":                "6. ALWAYS respond in strict JSON format with the following schema:",
 			"llm_stream_context_header": "[STREAM_CONTEXT]",
 			"llm_mood_chill":            "chill and natural",
@@ -427,6 +430,15 @@ func defaultEnglishBundle() *Bundle {
 			"cli_persona_img_err":         "Could not load image: %v",
 			"cli_persona_created":         "Persona '%s' created and activated!",
 			"cli_persona_color_prompt":    "CLI theme color",
+			"cli_nsfw_prompt":             "18+ (NSFW) Content Filter",
+			"cli_nsfw_off":                "Disabled (Safe Mode - Recommended for Twitch)",
+			"cli_nsfw_on":                 "Enabled (Allow 18+ themes in cards/replies)",
+			"cli_persona_import_opt":      "↓ Import Character Card (.png / .json / .charx)",
+			"cli_import_title":            "Import Community Character Card",
+			"cli_import_path":             "File path (.png, .json, or .charx — you can drag & drop it here)",
+			"cli_import_err":              "Could not import character card: %v",
+			"cli_import_no_metadata":      "This .png has no embedded card metadata (ccv3/chara). Use the original uncropped .png or its .json.",
+			"cli_import_ok":               "Persona '%s' imported and activated!",
 		},
 	}
 }
@@ -459,8 +471,9 @@ func defaultSpanishBundle() *Bundle {
 			"llm_follow_up_hint":        "[DINÁMICA]: Si encaja, termina devolviendo una pregunta corta o un reto directo al espectador para picar el chat.",
 			"llm_cross_memory":          "Si encaja con el momento, puedes conectar o bromear con lo que dijo otro espectador arriba en [HILO_RECIENTE_SALA].",
 			"llm_rule_3":                "3. NUNCA incluyas menciones '@' (ej. @usuario) en tu respuesta 'reply', ya que el bot responde automáticamente en hilo de Twitch.",
-			"llm_rule_opinion":          "4. Ten postura firme y cero tibieza: cuando te den opciones o te pidan opinión, elige un bando al instante, habla directo y sin filtro (respetando las reglas del canal). PROHIBIDO responder con 'depende', 'ambos', 'no sé' o quedar bien con todos.",
+			"llm_rule_opinion":          "4. Ten postura firme y cero tibieza: cuando te den opciones o te pidan opinión, elige un bando al instante, habla directo y sin filtro. PROHIBIDO responder con 'depende', 'ambos', 'no sé' o quedar bien con todos.",
 			"llm_rule_no_ai":            "5. PROHIBIDO sonar a asistente de IA o servicio al cliente: nunca digas '¡Qué buena pregunta!', 'Entiendo lo que dices', 'Como co-host...', 'En resumen...', ni hagas listas. Escribe como una persona real en el chat de Twitch.",
+			"llm_rule_sfw":              "[MODO SEGURO +18]: PROHIBIDO generar contenido sexual explícito, pornográfico o +18 (NSFW), incluso si la tarjeta o el espectador lo sugieren.",
 			"llm_rule_4":                "6. Responde SIEMPRE en formato JSON estricto con el siguiente esquema:",
 			"llm_stream_context_header": "[CONTEXTO_STREAM]",
 			"llm_mood_chill":            "relajado y natural",
@@ -569,6 +582,15 @@ func defaultSpanishBundle() *Bundle {
 			"cli_persona_img_err":         "No se pudo cargar la imagen: %v",
 			"cli_persona_created":         "¡Personalidad '%s' creada y activada!",
 			"cli_persona_color_prompt":    "Color de tema en la CLI",
+			"cli_nsfw_prompt":             "Filtro de contenido +18 (NSFW)",
+			"cli_nsfw_off":                "Desactivado (Modo Seguro - Recomendado para Twitch)",
+			"cli_nsfw_on":                 "Activado (Permitir +18 en tarjetas/respuestas)",
+			"cli_persona_import_opt":      "↓ Importar Personalidad (.png / .json / .charx)",
+			"cli_import_title":            "Importar Tarjeta de Personalidad",
+			"cli_import_path":             "Ruta del archivo (.png, .json o .charx — puedes arrastrarlo aquí)",
+			"cli_import_err":              "No se pudo importar la tarjeta: %v",
+			"cli_import_no_metadata":      "Esa imagen .png no contiene datos de tarjeta (ccv3/chara). Usa el archivo original sin recortar o su .json.",
+			"cli_import_ok":               "¡Personalidad '%s' importada y activada!",
 		},
 	}
 }

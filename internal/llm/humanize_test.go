@@ -110,4 +110,17 @@ func TestElizaOSPromptAndVectorFactSelection(t *testing.T) {
 	if !strings.Contains(userPrompt, "Llegó tarde hoy al directo") {
 		t.Fatalf("expected recent fact in user prompt, got:\n%s", userPrompt)
 	}
+
+	// Verify SFW toggle and unfiltered profanity directive from SOUL
+	sfwPrompt := llm.BuildSystemPromptWithOptions(organicSpec, loc, false)
+	if !strings.Contains(sfwPrompt, "[MODO SEGURO +18]") {
+		t.Fatalf("expected [MODO SEGURO +18] when allowNSFW=false, got:\n%s", sfwPrompt)
+	}
+	if !strings.Contains(sfwPrompt, "groserías") {
+		t.Fatalf("expected profanity permission in SOUL.es.md, got:\n%s", sfwPrompt)
+	}
+	nsfwPrompt := llm.BuildSystemPromptWithOptions(organicSpec, loc, true)
+	if strings.Contains(nsfwPrompt, "[MODO SEGURO +18]") {
+		t.Fatalf("expected [MODO SEGURO +18] omitted when allowNSFW=true")
+	}
 }

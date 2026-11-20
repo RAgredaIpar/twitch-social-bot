@@ -34,6 +34,7 @@ type ClientConfig struct {
 	FailureThreshold int
 	BreakerCooldown  time.Duration
 	HTTPClient       *http.Client
+	AllowNSFW        bool
 	Locale           *i18n.Manager
 }
 
@@ -112,8 +113,13 @@ func BuildSystemPrompt(spec *domain.PersonaSpec) string {
 	return BuildSystemPromptWithLocale(spec, nil)
 }
 
-// BuildSystemPromptWithLocale returns a deterministic static prompt localized via loc.
+// BuildSystemPromptWithLocale returns a deterministic static prompt localized via loc (SFW by default).
 func BuildSystemPromptWithLocale(spec *domain.PersonaSpec, loc *i18n.Manager) string {
+	return BuildSystemPromptWithOptions(spec, loc, false)
+}
+
+// BuildSystemPromptWithOptions builds the static system prompt with configurable NSFW mode.
+func BuildSystemPromptWithOptions(spec *domain.PersonaSpec, loc *i18n.Manager, allowNSFW bool) string {
 	if spec == nil {
 		return ""
 	}
@@ -199,6 +205,9 @@ func BuildSystemPromptWithLocale(spec *domain.PersonaSpec, loc *i18n.Manager) st
 	b.WriteString(loc.Get("llm_rule_3") + "\n")
 	b.WriteString(loc.Get("llm_rule_opinion") + "\n")
 	b.WriteString(loc.Get("llm_rule_no_ai") + "\n")
+	if !allowNSFW {
+		b.WriteString(loc.Get("llm_rule_sfw") + "\n")
+	}
 	b.WriteString(loc.Get("llm_rule_4") + "\n")
 	b.WriteString(`{"reply":"...","affinity_delta":0,"new_title":"","new_fact":"","slot_claim":""}` + "\n")
 
@@ -494,7 +503,7 @@ func (c *Client) Generate(ctx context.Context, input domain.PromptInput) (domain
 		return domain.LLMDecision{}, ErrCircuitOpen
 	}
 
-	systemPrompt := BuildSystemPromptWithLocale(input.Persona, c.cfg.Locale)
+	systemPrompt := BuildSystemPromptWithOptions(input.Persona, c.cfg.Locale, c.cfg.AllowNSFW)
 	userPrompt := BuildUserPromptWithLocale(input, c.cfg.Locale)
 	provider := DetectProvider(c.cfg.Provider, c.cfg.BaseURL)
 

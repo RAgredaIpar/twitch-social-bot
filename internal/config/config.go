@@ -32,6 +32,7 @@ type Config struct {
 	RoomBufferSize         int           `json:"room_buffer_size"`
 	RoomBufferMaxAge       time.Duration `json:"room_buffer_max_age"`
 	MaxViewerFacts         int           `json:"max_viewer_facts"`
+	AllowNSFW              bool          `json:"allow_nsfw"`
 	HTTPAddr               string        `json:"http_addr"`
 }
 
@@ -132,6 +133,9 @@ func LoadRaw(envFile string) (*Config, error) {
 	}
 	cfg.MaxViewerFacts = mvf
 
+	nsfwStr := strings.ToLower(strings.TrimSpace(get("ALLOW_NSFW", "false")))
+	cfg.AllowNSFW = nsfwStr == "true" || nsfwStr == "1" || nsfwStr == "yes" || nsfwStr == "on"
+
 	rmaStr := get("ROOM_BUFFER_MAX_AGE_SEC", "600")
 	if sec, err := strconv.Atoi(rmaStr); err == nil {
 		cfg.RoomBufferMaxAge = time.Duration(sec) * time.Second
@@ -225,6 +229,7 @@ func SaveEnv(path string, cfg *Config) error {
 	b.WriteString(fmt.Sprintf("USER_COOLDOWN_MS=%d\n", cfg.UserCooldown.Milliseconds()))
 	b.WriteString(fmt.Sprintf("ROOM_BUFFER_SIZE=%d\n", cfg.RoomBufferSize))
 	b.WriteString(fmt.Sprintf("MAX_VIEWER_FACTS=%d\n", cfg.MaxViewerFacts))
+	b.WriteString(fmt.Sprintf("ALLOW_NSFW=%t\n", cfg.AllowNSFW))
 	b.WriteString(fmt.Sprintf("ROOM_BUFFER_MAX_AGE_SEC=%d\n", int(cfg.RoomBufferMaxAge.Seconds())))
 	b.WriteString(fmt.Sprintf("HTTP_ADDR=%s\n", cfg.HTTPAddr))
 
