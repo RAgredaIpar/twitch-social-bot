@@ -157,7 +157,7 @@ func TestRunInteractive_SwitchLanguageAndSetupEnv(t *testing.T) {
 
 	// Simulate returning user (skips onboarding):
 	// 3 -> Switch language -> 2 (es)
-	// 2 -> Setup wizard -> 1 (DeepSeek), sk-1234567890, cid-abc, streamer_one, mochi_bot, 20
+	// 2 -> Setup wizard -> 1 (DeepSeek), sk-1234567890, cid-abc, streamer_one, mochi_bot, 20, 1 (NSFW off)
 	// 5 -> Exit
 	input := strings.Join([]string{
 		"3",
@@ -169,6 +169,7 @@ func TestRunInteractive_SwitchLanguageAndSetupEnv(t *testing.T) {
 		"streamer_one",
 		"mochi_bot",
 		"20",
+		"1",
 		"5",
 	}, "\n") + "\n"
 

@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -433,6 +434,21 @@ func runSetupWizard(in io.Reader, reader *bufio.Reader, out io.Writer, envPath s
 		cfg.MaxViewerFacts = n
 	}
 
+	fmt.Fprintln(out)
+	nsfwOpts := []string{
+		loc.Get("cli_nsfw_off"),
+		loc.Get("cli_nsfw_on"),
+	}
+	initNSFW := 0
+	if cfg.AllowNSFW {
+		initNSFW = 1
+	}
+	nsfwIdx, nErr := selectOption(in, reader, out, loc.Get("cli_nsfw_prompt"), loc.Get("cli_arrow_hint"), nsfwOpts, initNSFW)
+	if nErr != nil {
+		return nErr
+	}
+	cfg.AllowNSFW = nsfwIdx == 1
+
 	if err := config.SaveEnv(envPath, cfg); err != nil {
 		return err
 	}
@@ -482,12 +498,13 @@ func runPersonaSelector(in io.Reader, reader *bufio.Reader, out io.Writer, envPa
 	}
 
 	fmt.Fprintln(out)
-	opts := make([]string, len(ids)+1)
+	opts := make([]string, len(ids)+2)
 	for i, id := range ids {
 		color := ThemeColorANSI(&domain.PersonaSpec{ID: id})
 		opts[i] = color + id + cReset
 	}
 	opts[len(ids)] = cMint + loc.Get("cli_persona_create_opt") + cReset
+	opts[len(ids)+1] = cCyan + loc.Get("cli_persona_import_opt") + cReset
 
 	idx, err := selectOption(in, reader, out, loc.Get("cli_persona_title"), loc.Get("cli_arrow_hint"), opts, initIdx)
 	if err != nil || idx < 0 {
@@ -496,6 +513,9 @@ func runPersonaSelector(in io.Reader, reader *bufio.Reader, out io.Writer, envPa
 
 	if idx == len(ids) {
 		return runCreatePersonaWizard(in, reader, out, envPath, cfg, loc, pm)
+	}
+	if idx == len(ids)+1 {
+		return runImportPersonaWizard(in, reader, out, envPath, cfg, loc, pm)
 	}
 
 	spec, err := pm.Switch(ids[idx])
@@ -580,6 +600,86 @@ func runCreatePersonaWizard(in io.Reader, reader *bufio.Reader, out io.Writer, e
 		return err
 	}
 
+	themeHex, err := promptPersonaThemeColor(in, reader, out, loc)
+	if err != nil {
+		return err
+	}
+
+	targetFile := filepath.Join(personaDir, id+".yaml")
+	if err := writeCustomPersonaYAML(targetFile, id, name, botName, themeHex, desc, avatarRows); err != nil {
+		return err
+	}
+
+	if err := activateSavedPersona(envPath, cfg, pm, targetFile); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "\n  %s✓ %s%s\n", hexToANSI(themeHex), loc.Format("cli_persona_created", botName), cReset)
+	return nil
+}
+
+func runImportPersonaWizard(in io.Reader, reader *bufio.Reader, out io.Writer, envPath string, cfg *config.Config, loc *i18n.Manager, pm *persona.Manager) error {
+	fmt.Fprintf(out, "\n  %s%s── %s ──%s\n\n", cBold, cCyan, loc.Get("cli_import_title"), cReset)
+
+	var spec *domain.PersonaSpec
+	var imgBytes []byte
+	for {
+		path, err := promptField(reader, out, loc.Get("cli_import_path"), "", false)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(path) == "" {
+			return nil
+		}
+		imported, rawImg, iErr := persona.ImportFile(path)
+		if iErr != nil {
+			if errors.Is(iErr, persona.ErrNoCardMetadata) {
+				fmt.Fprintf(out, "  %s%s%s\n", cYellow, loc.Get("cli_import_no_metadata"), cReset)
+			} else {
+				fmt.Fprintf(out, "  %s%s%s\n", cYellow, loc.Format("cli_import_err", iErr), cReset)
+			}
+			continue
+		}
+		spec = imported
+		imgBytes = rawImg
+		break
+	}
+
+	if len(imgBytes) > 0 {
+		if rows, err := ImageBytesToANSI(imgBytes); err == nil {
+			spec.AvatarRows = rows
+			fmt.Fprintf(out, "\n  %s%s%s\n", cDim, loc.Get("cli_persona_img_preview"), cReset)
+			for _, r := range spec.AvatarRows {
+				fmt.Fprintf(out, "  %s\n", r)
+			}
+		}
+	}
+
+	themeHex, err := promptPersonaThemeColor(in, reader, out, loc)
+	if err != nil {
+		return err
+	}
+	spec.ThemeColor = themeHex
+
+	personaDir := cfg.PersonaDir
+	if personaDir == "" {
+		personaDir = "personas"
+	}
+	if err := os.MkdirAll(personaDir, 0755); err != nil {
+		return err
+	}
+
+	targetFile := filepath.Join(personaDir, spec.ID+".yaml")
+	if err := persona.WriteYAML(targetFile, spec); err != nil {
+		return err
+	}
+	if err := activateSavedPersona(envPath, cfg, pm, targetFile); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "\n  %s✓ %s%s\n", hexToANSI(themeHex), loc.Format("cli_import_ok", spec.BotName), cReset)
+	return nil
+}
+
+func promptPersonaThemeColor(in io.Reader, reader *bufio.Reader, out io.Writer, loc *i18n.Manager) (string, error) {
 	fmt.Fprintln(out)
 	colorChoices := []struct {
 		Label string
@@ -598,27 +698,20 @@ func runCreatePersonaWizard(in io.Reader, reader *bufio.Reader, out io.Writer, e
 	}
 	cIdx, err := selectOption(in, reader, out, loc.Get("cli_persona_color_prompt"), loc.Get("cli_arrow_hint"), colorOpts, 0)
 	if err != nil {
-		return err
+		return "", err
 	}
-	themeHex := colorChoices[0].Hex
 	if cIdx >= 0 && cIdx < len(colorChoices) {
-		themeHex = colorChoices[cIdx].Hex
+		return colorChoices[cIdx].Hex, nil
 	}
+	return colorChoices[0].Hex, nil
+}
 
-	targetFile := filepath.Join(personaDir, id+".yaml")
-	if err := writeCustomPersonaYAML(targetFile, id, name, botName, themeHex, desc, avatarRows); err != nil {
-		return err
-	}
-
+func activateSavedPersona(envPath string, cfg *config.Config, pm *persona.Manager, targetFile string) error {
 	if _, err := pm.Switch(targetFile); err != nil {
 		return err
 	}
 	cfg.PersonaFile = targetFile
-	if err := config.SaveEnv(envPath, cfg); err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "\n  %s✓ %s%s\n", hexToANSI(themeHex), loc.Format("cli_persona_created", botName), cReset)
-	return nil
+	return config.SaveEnv(envPath, cfg)
 }
 
 // ThemeColorANSI returns the ANSI Truecolor escape sequence for a persona's CLI border/accent.
@@ -670,31 +763,24 @@ func sanitizePersonaID(raw string) string {
 }
 
 func writeCustomPersonaYAML(path, id, name, botName, themeColor, desc string, avatarRows []string) error {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("id: %s\n", strconv.Quote(id)))
-	sb.WriteString(fmt.Sprintf("name: %s\n", strconv.Quote(name)))
-	sb.WriteString(fmt.Sprintf("bot_name: %s\n", strconv.Quote(botName)))
-	if themeColor != "" {
-		sb.WriteString(fmt.Sprintf("theme_color: %s\n", strconv.Quote(themeColor)))
-	}
-	sb.WriteString("trigger_prefix: \"!bot\"\n\n")
-	sb.WriteString("bio:\n")
+	var bio []string
 	for _, line := range strings.Split(desc, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			sb.WriteString("  - " + strconv.Quote(trimmed) + "\n")
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			bio = append(bio, trimmed)
 		}
 	}
-	sb.WriteString("\nstyle:\n")
-	sb.WriteString("  - \"Habla de forma natural, directa y en personaje como en un chat real de Twitch.\"\n")
-	sb.WriteString("\nblocked_words:\n  - \"toxicidad_extrema\"\n  - \"insulto_grave\"\n")
-	if len(avatarRows) > 0 {
-		sb.WriteString("\navatar_rows:\n")
-		for _, r := range avatarRows {
-			sb.WriteString("  - " + strconv.Quote(r) + "\n")
-		}
-	}
-	return os.WriteFile(path, []byte(sb.String()), 0644)
+	return persona.WriteYAML(path, &domain.PersonaSpec{
+		ID:               id,
+		Name:             name,
+		BotName:          botName,
+		ThemeColor:       themeColor,
+		TriggerPrefix:    "!bot",
+		MaxPositiveDelta: 5,
+		MaxNegativeDelta: -8,
+		Bio:              bio,
+		Style:            []string{"Habla de forma natural, directa y en personaje como en un chat real de Twitch."},
+		AvatarRows:       avatarRows,
+	})
 }
 
 func promptField(reader *bufio.Reader, out io.Writer, label, current string, secret bool) (string, error) {

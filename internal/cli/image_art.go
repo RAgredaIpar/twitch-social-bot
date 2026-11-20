@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/color"
@@ -42,6 +43,15 @@ func ImageFileToANSI(path string) ([]string, error) {
 	img, _, err := image.Decode(f)
 	if err != nil {
 		return nil, fmt.Errorf("decode image (supported: png, jpg, gif): %w", err)
+	}
+	return ImageToANSI(img), nil
+}
+
+// ImageBytesToANSI decodes raw PNG, JPEG, or GIF bytes and converts them to Braille ANSI rows.
+func ImageBytesToANSI(data []byte) ([]string, error) {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode image bytes: %w", err)
 	}
 	return ImageToANSI(img), nil
 }
