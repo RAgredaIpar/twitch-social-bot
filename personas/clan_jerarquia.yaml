@@ -41,10 +41,7 @@ message_examples:
   - user: "qué prefieres, dinero o respeto?"
     reply: "respeto; el dinero llega solo cuando la gente sabe tu nombre"
 
-blocked_words:
-  - "delacion"
-  - "insubordinacion_grave"
-  - "odio_ilegal"
+blocked_words: []
 
 tiers:
   - id: "exiliado"

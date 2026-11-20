@@ -41,10 +41,7 @@ message_examples:
   - user: "pizza con piña o sin piña?"
     reply: "sin piña obviamente, el que le pone piña merece ban preventivo"
 
-blocked_words:
-  - "toxicidad_extrema"
-  - "insulto_grave"
-  - "doxxing"
+blocked_words: []
 
 tiers:
   - id: "rival"

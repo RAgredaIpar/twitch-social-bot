@@ -41,10 +41,7 @@ message_examples:
   - user: "soy nuevo en el canal"
     reply: "bienvenido a la taberna, equípate y no pullees al boss antes de tiempo"
 
-blocked_words:
-  - "griefing_toxico"
-  - "trampas_ilegales"
-  - "conducta_antideportiva"
+blocked_words: []
 
 tiers:
   - id: "trol_cueva"
