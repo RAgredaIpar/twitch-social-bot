@@ -1,25 +1,17 @@
-## Twitch Social Bot v2.1.0
+## Twitch Social Bot v2.1.1
 
-### What's New / Novedades
+### Bug Fix / Corrección de Error
 
-- **Global `SOUL.md` & Unfiltered Banter / Alma Global y Sin Autocensura**
-  - Added global `SOUL.md` and `SOUL.es.md` root directives so every persona naturally talks like a real Twitch chat regular without corporate filler.
-  - Explicitly allows casual swearing and strong slang in character, and cleared restrictive per-persona `blocked_words` defaults.
+- **Same-Account Broadcaster Mode Fix / Soporte para Misma Cuenta (Streamer = Bot)**
+  - **EN:** Fixed an issue where running the bot on the same Twitch account as the broadcaster (`BroadcasterID == BotUserID`) caused all `!bot ...` / `@bot ...` prompts and admin commands sent by the streamer to be silently dropped by the self-message filter. Trigger detection now runs before filtering self-messages, allowing triggered broadcaster messages in same-account mode while still ignoring untriggered chat and dedicated-bot self-messages.
+  - **ES:** Corregido un error por el cual, al usar la misma cuenta de Twitch para el canal y el bot (`BroadcasterID == BotUserID`), el filtro de auto-mensajes descartaba todos los mensajes del streamer (`!bot hola`, `@bot ...`, `!bot status`, etc.) antes de detectar el trigger. Ahora los mensajes del broadcaster que incluyen el prefijo o mención del bot se procesan correctamente.
 
-- **Modular Character Architecture & Local Vector Memory / Memoria Vectorial Local**
-  - Added modular `bio`, `lore`, `adjectives`, `topics`, `style`, and few-shot `message_examples` support to YAML personas.
-  - Raised viewer memory capacity from `15` to **`150` facts** and added a zero-dependency local N-gram cosine similarity search that retrieves the **5 most relevant + 3 latest facts** per turn.
-  - Made `tiers` and `slots` 100% optional for organic custom or imported personalities.
-
-- **Universal Character Card Importer (`.png` / `.json` / `.charx`) / Importador Universal de Tarjetas**
-  - Added **`↓ Import Character Card`** in the CLI: drag & drop community V1/V2/V3 `.png` cards (`ccv3` & `chara` chunks), `.charx` archives, or `.json` files.
-  - Automatically extracts the embedded avatar to Unicode Braille, strips roleplay asterisk narration, and creates a ready-to-use persona.
-
-- **Configurable `18+` Filter (`ALLOW_NSFW`) / Filtro `+18` Configurable**
-  - Added `ALLOW_NSFW` (default `false` safe mode for Twitch) with an arrow-key toggle inside the CLI setup wizard.
+- **Echo-Loop Guard / Protección Anti-Bucles**
+  - **EN:** Added a short-lived (`60s`) cache of sent bot replies (`sentReplies`) so Twitch EventSub echoes are ignored in same-account mode even if a generated reply mentions `@botname`.
+  - **ES:** Se añadió una caché temporal (`60s`) de respuestas enviadas para ignorar ecos devueltos por Twitch EventSub en modo misma cuenta y evitar bucles infinitos.
 
 ---
 
 ### How to Update / Cómo Actualizar
-- **From v1.x / v2.0.0:** Open `twitch-social-bot.exe` and press **Enter** on **Update now and restart**—your `.env`, `.tokens.json`, and `data/` memory are preserved automatically.
+- **From v2.1.0 / v2.0.0 / v1.x:** Open `twitch-social-bot.exe` and press **Enter** on **Update now and restart** (**Actualizar ahora y reiniciar**)—your `.env`, `.tokens.json`, `personas/`, and `data/` memory are preserved automatically.
 - **New users:** Download `twitch-social-bot-windows.zip` below, extract it, and double-click `twitch-social-bot.exe`.

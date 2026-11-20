@@ -61,6 +61,8 @@ type Orchestrator struct {
 	channelMu         sync.Mutex
 	cachedChannel     domain.ChannelInfo
 	cachedChannelAt   time.Time
+	sentMu            sync.Mutex
+	sentReplies       map[string]time.Time
 }
 
 // NewOrchestrator creates a new conversational orchestrator.
@@ -73,9 +75,10 @@ func NewOrchestrator(cfg OrchestratorConfig) *Orchestrator {
 		loc, _ = i18n.NewManager("", "es")
 	}
 	return &Orchestrator{
-		cfg:  cfg,
-		loc:  loc,
-		mood: social.NewMoodTracker(cfg.Clock),
+		cfg:         cfg,
+		loc:         loc,
+		mood:        social.NewMoodTracker(cfg.Clock),
+		sentReplies: make(map[string]time.Time),
 	}
 }
 
@@ -141,20 +144,24 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		return nil
 	}
 
-	// Filter self messages
-	if o.cfg.BotUserID != "" && msg.UserID == o.cfg.BotUserID {
-		return nil
-	}
-	if o.cfg.BotLogin != "" && strings.EqualFold(msg.Username, o.cfg.BotLogin) {
-		return nil
-	}
-
 	var spec *domain.PersonaSpec
 	if o.cfg.Persona != nil {
 		spec = o.cfg.Persona.Current()
 	}
 
 	payload, triggered := matchTrigger(msg.Text, spec, o.cfg.BotLogin)
+
+	// Filter self messages: in dedicated-bot mode, drop everything from the bot account.
+	// In same-account mode (broadcaster == bot), allow triggered commands/prompts from the
+	// streamer while dropping untriggered echoes and recently sent bot replies.
+	isSelf := (o.cfg.BotUserID != "" && msg.UserID == o.cfg.BotUserID) ||
+		(o.cfg.BotLogin != "" && strings.EqualFold(msg.Username, o.cfg.BotLogin))
+	if isSelf {
+		sameAccount := msg.IsBroadcaster || (o.cfg.BotUserID != "" && msg.BroadcasterID != "" && msg.BroadcasterID == o.cfg.BotUserID)
+		if !sameAccount || !triggered || o.wasRecentlySent(trimmedText) {
+			return nil
+		}
+	}
 	if !triggered {
 		// Non-triggered message: push to room buffer
 		if o.cfg.Room != nil && o.cfg.Guard != nil {
@@ -492,7 +499,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 	}
 
 	if o.cfg.Sender != nil {
-		if err := o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, safeReply); err != nil {
+		if err := o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, safeReply); err != nil {
 			return fmt.Errorf("send reply: %w", err)
 		}
 		atomic.AddInt64(&o.generatedReplies, 1)
@@ -594,4 +601,63 @@ func resolveViewerRole(msg domain.ChatMessage, profile domain.ViewerProfile) str
 	default:
 		return "viewer"
 	}
+}
+
+const sentReplyTTL = 60 * time.Second
+
+func (o *Orchestrator) now() time.Time {
+	if o.cfg.Clock != nil {
+		return o.cfg.Clock.Now()
+	}
+	return time.Now()
+}
+
+func (o *Orchestrator) recordSentReply(text string) {
+	key := strings.TrimSpace(text)
+	if key == "" {
+		return
+	}
+	now := o.now()
+	o.sentMu.Lock()
+	defer o.sentMu.Unlock()
+	if o.sentReplies == nil {
+		o.sentReplies = make(map[string]time.Time)
+	}
+	for k, ts := range o.sentReplies {
+		if now.Sub(ts) > sentReplyTTL {
+			delete(o.sentReplies, k)
+		}
+	}
+	o.sentReplies[key] = now
+}
+
+func (o *Orchestrator) wasRecentlySent(text string) bool {
+	key := strings.TrimSpace(text)
+	if key == "" {
+		return false
+	}
+	now := o.now()
+	o.sentMu.Lock()
+	defer o.sentMu.Unlock()
+	if o.sentReplies == nil {
+		return false
+	}
+	for k, ts := range o.sentReplies {
+		if now.Sub(ts) > sentReplyTTL {
+			delete(o.sentReplies, k)
+		}
+	}
+	ts, ok := o.sentReplies[key]
+	if !ok {
+		return false
+	}
+	return now.Sub(ts) <= sentReplyTTL
+}
+
+func (o *Orchestrator) sendTrackedReply(ctx context.Context, broadcasterID, replyParentID, text string) error {
+	if o.cfg.Sender == nil {
+		return nil
+	}
+	o.recordSentReply(text)
+	return o.cfg.Sender.SendReply(ctx, broadcasterID, o.cfg.BotUserID, replyParentID, text)
 }

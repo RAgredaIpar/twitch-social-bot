@@ -651,3 +651,107 @@ func TestStatusSnapshot(t *testing.T) {
 		t.Errorf("expected initially not paused")
 	}
 }
+
+func TestHandleMessage_SameAccountBroadcasterMode(t *testing.T) {
+	fakeClock := domain.NewFakeClock(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC))
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	personaProv := newMockPersonaProvider(samplePersona())
+	llmCli := &mockLLMClient{
+		decision: domain.LLMDecision{
+			Reply:         "@rhfjfgzrdg ¡Hola! Todo al 100 por acá.",
+			AffinityDelta: 1,
+		},
+	}
+	sender := &mockChatSender{}
+	orch := engine.NewOrchestrator(engine.OrchestratorConfig{
+		BotUserID: "677226599",
+		BotLogin:  "rhfjfgzrdg",
+		Clock:     fakeClock,
+		Store:     st,
+		LLM:       llmCli,
+		Sender:    sender,
+		Persona:   personaProv,
+		Limiter:   ratelimit.NewCooldownLimiter(fakeClock, 3*time.Second, 15*time.Second),
+		Room:      room.NewBuffer(fakeClock, 25, 10*time.Minute),
+		Social:    social.NewEngine(fakeClock),
+		Guard:     safety.NewGuard(400, 480),
+	})
+
+	ctx := context.Background()
+
+	// 1. Streamer typing "!bot hola" from the same account as the bot should trigger a reply.
+	if err := orch.HandleMessage(ctx, domain.ChatMessage{
+		MessageID:     "msg_1",
+		BroadcasterID: "677226599",
+		UserID:        "677226599",
+		Username:      "rhfjfgzrdg",
+		DisplayName:   "Rhfjfgzrdg",
+		IsBroadcaster: true,
+		Text:          "!bot hola",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if llmCli.callCount != 1 {
+		t.Fatalf("expected 1 LLM call in same-account mode, got %d", llmCli.callCount)
+	}
+	if len(sender.replies) != 1 {
+		t.Fatalf("expected 1 reply sent, got %d", len(sender.replies))
+	}
+
+	// 2. Echo of the bot's own reply (even if it starts with @BotLogin) must be ignored to prevent loops.
+	fakeClock.Advance(20 * time.Second)
+	if err := orch.HandleMessage(ctx, domain.ChatMessage{
+		MessageID:     "msg_echo",
+		BroadcasterID: "677226599",
+		UserID:        "677226599",
+		Username:      "rhfjfgzrdg",
+		DisplayName:   "Rhfjfgzrdg",
+		IsBroadcaster: true,
+		Text:          sender.replies[0].Text,
+	}); err != nil {
+		t.Fatalf("unexpected error on echo: %v", err)
+	}
+	if llmCli.callCount != 1 {
+		t.Errorf("expected echo of bot reply to be ignored, got %d LLM calls", llmCli.callCount)
+	}
+
+	// 3. Untriggered streamer chat must not call LLM.
+	if err := orch.HandleMessage(ctx, domain.ChatMessage{
+		MessageID:     "msg_chat",
+		BroadcasterID: "677226599",
+		UserID:        "677226599",
+		Username:      "rhfjfgzrdg",
+		DisplayName:   "Rhfjfgzrdg",
+		IsBroadcaster: true,
+		Text:          "hola chat, empezamos",
+	}); err != nil {
+		t.Fatalf("unexpected error on untriggered chat: %v", err)
+	}
+	if llmCli.callCount != 1 {
+		t.Errorf("expected untriggered chat not to call LLM, got %d calls", llmCli.callCount)
+	}
+
+	// 4. Broadcaster admin command (!bot status) should work from the same account.
+	if err := orch.HandleMessage(ctx, domain.ChatMessage{
+		MessageID:     "msg_status",
+		BroadcasterID: "677226599",
+		UserID:        "677226599",
+		Username:      "rhfjfgzrdg",
+		DisplayName:   "Rhfjfgzrdg",
+		IsBroadcaster: true,
+		Text:          "!bot status",
+	}); err != nil {
+		t.Fatalf("unexpected error on status command: %v", err)
+	}
+	if len(sender.replies) != 2 {
+		t.Errorf("expected status reply to be sent (total 2), got %d", len(sender.replies))
+	}
+	if !strings.Contains(strings.ToLower(sender.replies[1].Text), "luna") {
+		t.Errorf("expected status reply to mention persona, got %q", sender.replies[1].Text)
+	}
+}
