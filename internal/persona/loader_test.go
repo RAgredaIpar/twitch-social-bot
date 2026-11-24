@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -642,6 +643,9 @@ func TestProductionTemplates(t *testing.T) {
 			if len(spec.Bio) == 0 || len(spec.Lore) == 0 || len(spec.Style) == 0 || len(spec.MessageExamples) == 0 {
 				t.Errorf("expected ElizaOS fields populated in %s", tc.filename)
 			}
+			if strings.TrimSpace(spec.Gender) == "" {
+				t.Errorf("expected gender populated in %s", tc.filename)
+			}
 		})
 	}
 }
@@ -688,5 +692,34 @@ message_examples:
 	}
 	if len(spec.Tiers) != 0 || len(spec.Slots) != 0 {
 		t.Fatalf("expected empty tiers and slots, got %d tiers, %d slots", len(spec.Tiers), len(spec.Slots))
+	}
+}
+
+func TestParseAndWriteYAML_GenderRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gender_test.yaml")
+	inSpec := &domain.PersonaSpec{
+		ID:               "gender_test",
+		Name:             "Test",
+		BotName:          "Kael",
+		Gender:           "Masculino (hombre / él)",
+		TriggerPrefix:    "!bot",
+		MaxPositiveDelta: 5,
+		MaxNegativeDelta: -8,
+		Bio:              []string{"Bio de prueba"},
+	}
+	if err := persona.WriteYAML(path, inSpec); err != nil {
+		t.Fatalf("WriteYAML failed: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := persona.ParseYAML(raw)
+	if err != nil {
+		t.Fatalf("ParseYAML failed: %v", err)
+	}
+	if parsed.Gender != inSpec.Gender {
+		t.Fatalf("expected gender %q, got %q", inSpec.Gender, parsed.Gender)
 	}
 }

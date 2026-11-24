@@ -133,6 +133,9 @@ func BuildSystemPromptWithOptions(spec *domain.PersonaSpec, loc *i18n.Manager, a
 	}
 	b.WriteString(loc.Get("llm_role_header") + "\n")
 	b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_bot_name_label"), spec.BotName))
+	if strings.TrimSpace(spec.Gender) != "" {
+		b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_gender_label"), spec.Gender))
+	}
 	if strings.TrimSpace(spec.BasePersona) != "" {
 		b.WriteString(fmt.Sprintf("%s: %s\n", loc.Get("llm_base_persona_label"), spec.BasePersona))
 	}

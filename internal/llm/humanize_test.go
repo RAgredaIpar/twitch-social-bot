@@ -19,12 +19,13 @@ func TestHumanizePrompts_MinimalMoodRoleAndStreamContext(t *testing.T) {
 	spec := &domain.PersonaSpec{
 		ID:          "cohost_amigos",
 		BotName:     "Mochi",
+		Gender:      "Femenino (mujer / ella)",
 		BasePersona: "Co-host sarcástica",
 	}
 
 	sysPrompt := llm.BuildSystemPromptWithLocale(spec, loc)
-	if !strings.Contains(sysPrompt, "SOUL.md") || !strings.Contains(sysPrompt, "Jamás uses relleno de asistente") || !strings.Contains(sysPrompt, "*asteriscos*") {
-		t.Fatalf("expected SOUL.md parent, anti-AI, and anti-asterisk boundaries in system prompt, got:\n%s", sysPrompt)
+	if !strings.Contains(sysPrompt, "SOUL.md") || !strings.Contains(sysPrompt, "Jamás uses relleno de asistente") || !strings.Contains(sysPrompt, "*asteriscos*") || !strings.Contains(sysPrompt, "Género: Femenino (mujer / ella)") {
+		t.Fatalf("expected SOUL.md parent, gender, anti-AI, and anti-asterisk boundaries in system prompt, got:\n%s", sysPrompt)
 	}
 	if strings.Contains(sysPrompt, "PROHIBIDO sonar a asistente de IA") {
 		t.Fatalf("expected style/anti-AI rules not to be duplicated in hard security rules block, got:\n%s", sysPrompt)

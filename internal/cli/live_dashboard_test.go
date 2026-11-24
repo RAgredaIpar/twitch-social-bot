@@ -199,3 +199,55 @@ func TestLiveDashboard_StatesLogsToggleAndBoxAlignment(t *testing.T) {
 		t.Fatalf("expected live dashboard to show Celeste after switch, got:\n%s", afterSwitchFrame)
 	}
 }
+
+func TestLiveDashboard_LogsWrapFullMessageAndScroll(t *testing.T) {
+	loc, err := i18n.NewManager("", "es")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lb := cli.NewLogBuffer(100)
+	longErr := "2026/11/24 13:27:52 Error procesando mensaje de chat: llm generate: failed to parse decision: empty LLM response after fallback timeout on deepseek-chat"
+	_, _ = fmt.Fprintln(lb, "2026/11/24 13:26:00 OLD_LINE_MARKER_01")
+	for i := 2; i <= 18; i++ {
+		_, _ = fmt.Fprintf(lb, "2026/11/24 13:26:%02d linea intermedia %d\n", i, i)
+	}
+	_, _ = fmt.Fprintln(lb, longErr)
+
+	dash := cli.NewLiveDashboard(cli.LiveDashboardConfig{
+		Version: "v2.3.2",
+		Logs:    lb,
+		Locale:  loc,
+	})
+	dash.ToggleLogs()
+
+	now := time.Date(2026, 11, 24, 13, 28, 0, 0, time.UTC)
+	bottomFrame := stripANSI(dash.RenderFrame(now))
+	// Full long error text must be visible across wrapped rows (not cut off with …).
+	for _, fragment := range []string{
+		"Error procesando mensaje de chat:",
+		"failed to parse decision: empty LLM response after fallback timeout",
+		"deepseek-chat",
+		"[Arriba/Abajo] Scroll",
+	} {
+		if !strings.Contains(bottomFrame, fragment) {
+			t.Fatalf("expected wrapped log fragment %q in bottom frame, got:\n%s", fragment, bottomFrame)
+		}
+	}
+	if strings.Contains(bottomFrame, "…") {
+		t.Fatalf("expected zero ellipsis truncation in wrapped logs view, got:\n%s", bottomFrame)
+	}
+	for _, line := range strings.Split(bottomFrame, "\n") {
+		if strings.HasPrefix(line, "  │") || strings.HasPrefix(line, "  ╭") || strings.HasPrefix(line, "  ╰") {
+			if w := len([]rune(line)); w != 78 {
+				t.Fatalf("expected aligned wrapped log box width 78, got %d on line %q", w, line)
+			}
+		}
+	}
+
+	// Scroll up to reveal oldest line and confirm scroll indicator in header.
+	dash.ScrollLogs(20)
+	scrolledFrame := stripANSI(dash.RenderFrame(now))
+	if !strings.Contains(scrolledFrame, "OLD_LINE_MARKER_01") || !strings.Contains(scrolledFrame, "(+") {
+		t.Fatalf("expected scrolled logs frame to display oldest line and (+N) indicator, got:\n%s", scrolledFrame)
+	}
+}

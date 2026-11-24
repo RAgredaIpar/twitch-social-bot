@@ -89,6 +89,9 @@ func parseYAMLContent(content string) (*domain.PersonaSpec, error) {
 		case "bot_name":
 			spec.BotName = unquoteString(val)
 			i++
+		case "gender":
+			spec.Gender = unquoteString(val)
+			i++
 		case "trigger_prefix":
 			spec.TriggerPrefix = unquoteString(val)
 			i++

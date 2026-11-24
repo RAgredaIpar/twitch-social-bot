@@ -32,6 +32,9 @@ func WriteYAML(path string, spec *domain.PersonaSpec) error {
 	sb.WriteString(fmt.Sprintf("id: %s\n", strconv.Quote(spec.ID)))
 	sb.WriteString(fmt.Sprintf("name: %s\n", strconv.Quote(spec.Name)))
 	sb.WriteString(fmt.Sprintf("bot_name: %s\n", strconv.Quote(spec.BotName)))
+	if strings.TrimSpace(spec.Gender) != "" {
+		sb.WriteString(fmt.Sprintf("gender: %s\n", strconv.Quote(spec.Gender)))
+	}
 	if spec.ThemeColor != "" {
 		sb.WriteString(fmt.Sprintf("theme_color: %s\n", strconv.Quote(spec.ThemeColor)))
 	}

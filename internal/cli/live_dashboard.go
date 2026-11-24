@@ -40,6 +40,7 @@ type LiveDashboardConfig struct {
 type LiveDashboard struct {
 	cfg        LiveDashboardConfig
 	showLogs   bool
+	logScroll  int
 	showPicker bool
 	pickerIDs  []string
 	pickerIdx  int
@@ -72,6 +73,18 @@ func NewLiveDashboard(cfg LiveDashboardConfig) *LiveDashboard {
 func (d *LiveDashboard) ToggleLogs() {
 	d.showPicker = false
 	d.showLogs = !d.showLogs
+	d.logScroll = 0
+}
+
+// ScrollLogs adjusts the log view scroll offset (positive scrolls up toward older lines).
+func (d *LiveDashboard) ScrollLogs(delta int) {
+	if !d.showLogs {
+		return
+	}
+	d.logScroll += delta
+	if d.logScroll < 0 {
+		d.logScroll = 0
+	}
 }
 
 // ShowingLogs reports whether the live logs view is currently active.
@@ -209,10 +222,16 @@ func (d *LiveDashboard) Run(ctx context.Context, onBackToMenu, onQuit func()) {
 				if d.showPicker {
 					d.MovePersonaCursor(-1)
 					d.drawFrame()
+				} else if d.showLogs {
+					d.ScrollLogs(1)
+					d.drawFrame()
 				}
 			case LiveKeyDown:
 				if d.showPicker {
 					d.MovePersonaCursor(1)
+					d.drawFrame()
+				} else if d.showLogs {
+					d.ScrollLogs(-1)
 					d.drawFrame()
 				}
 			case LiveKeyEnter:
@@ -338,13 +357,29 @@ func (d *LiveDashboard) RenderFrame(now time.Time) string {
 			viewLabel = "View"
 			quitHint = "Quit"
 		}
-		footer = fmt.Sprintf("\n  %s%s:%s %s%s%s  %s[P]%s Persona  %s[L]%s %s  %s[Q/Esc]%s %s  %s[Ctrl+C]%s %s\n",
-			cDim, viewLabel, cReset, cBold+cWhite, viewName, cReset,
-			cPurple, cReset,
-			cYellow, cReset, toggleHint,
-			cCyan, cReset, menuHint,
-			cGray, cReset, quitHint,
-		)
+		if d.showLogs {
+			scrollLabel := "Scroll"
+			arrowLabel := "[Arriba/Abajo]"
+			if isEN {
+				arrowLabel = "[Up/Down]"
+			}
+			footer = fmt.Sprintf("\n  %s%s:%s %s%s%s  %s%s%s %s  %s[P]%s Persona  %s[L]%s %s  %s[Q/Esc]%s %s  %s[Ctrl+C]%s %s\n",
+				cDim, viewLabel, cReset, cBold+cWhite, viewName, cReset,
+				cYellow, arrowLabel, cReset, scrollLabel,
+				cPurple, cReset,
+				cYellow, cReset, toggleHint,
+				cCyan, cReset, menuHint,
+				cGray, cReset, quitHint,
+			)
+		} else {
+			footer = fmt.Sprintf("\n  %s%s:%s %s%s%s  %s[P]%s Persona  %s[L]%s %s  %s[Q/Esc]%s %s  %s[Ctrl+C]%s %s\n",
+				cDim, viewLabel, cReset, cBold+cWhite, viewName, cReset,
+				cPurple, cReset,
+				cYellow, cReset, toggleHint,
+				cCyan, cReset, menuHint,
+				cGray, cReset, quitHint,
+			)
+		}
 	}
 	return frame + footer
 }
@@ -480,6 +515,9 @@ func (d *LiveDashboard) renderLiveFrame(now time.Time, spec *domain.PersonaSpec,
 }
 
 func (d *LiveDashboard) renderLogsFrame(isEN bool) string {
+	const logRows = 14
+	const maxLineWidth = liveBoxInner - 2
+
 	var b strings.Builder
 	title := "[LOGS] MODO DEPURACION EN VIVO"
 	emptyMsg := "Sin logs registrados aun."
@@ -488,21 +526,50 @@ func (d *LiveDashboard) renderLogsFrame(isEN bool) string {
 		emptyMsg = "No logs recorded yet."
 	}
 
-	b.WriteString(liveBoxTopTitle(cYellow, title))
-	var lines []string
+	var rawLines []string
 	if d.cfg.Logs != nil {
-		lines = d.cfg.Logs.Lines(14)
+		rawLines = d.cfg.Logs.Lines(200)
 	}
-	if len(lines) == 0 {
+
+	var wrappedRows []string
+	for _, entry := range rawLines {
+		col := logLineColor(entry)
+		for _, seg := range wrapLogLine(entry, maxLineWidth) {
+			wrappedRows = append(wrappedRows, col+seg+cReset)
+		}
+	}
+
+	maxScroll := len(wrappedRows) - logRows
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if d.logScroll > maxScroll {
+		d.logScroll = maxScroll
+	}
+	if d.logScroll < 0 {
+		d.logScroll = 0
+	}
+	if d.logScroll > 0 {
+		title = fmt.Sprintf("%s (+%d)", title, d.logScroll)
+	}
+
+	b.WriteString(liveBoxTopTitle(cYellow, title))
+	if len(wrappedRows) == 0 {
 		b.WriteString(liveBoxRow(cYellow, cDim+emptyMsg+cReset))
-		for i := 1; i < 14; i++ {
+		for i := 1; i < logRows; i++ {
 			b.WriteString(liveBoxRow(cYellow, ""))
 		}
 	} else {
-		for _, line := range lines {
-			b.WriteString(liveBoxRow(cYellow, styleLogLine(line)))
+		end := len(wrappedRows) - d.logScroll
+		start := end - logRows
+		if start < 0 {
+			start = 0
 		}
-		for i := len(lines); i < 14; i++ {
+		visible := wrappedRows[start:end]
+		for _, row := range visible {
+			b.WriteString(liveBoxRow(cYellow, row))
+		}
+		for i := len(visible); i < logRows; i++ {
 			b.WriteString(liveBoxRow(cYellow, ""))
 		}
 	}
@@ -657,18 +724,68 @@ func renderSpeakingRing(artRows []string, accent, state string, tick int) []stri
 	return out
 }
 
-func styleLogLine(line string) string {
+func logLineColor(line string) string {
 	lower := strings.ToLower(line)
 	switch {
 	case strings.Contains(lower, "error") || strings.Contains(lower, "failed"):
-		return "\x1b[38;2;248;113;113m" + line + cReset
+		return "\x1b[38;2;248;113;113m"
 	case strings.Contains(lower, "confirmada") || strings.Contains(lower, "exitosa") || strings.Contains(lower, "[chat out]"):
-		return cMint + line + cReset
+		return cMint
 	case strings.Contains(lower, "suscribiendo") || strings.Contains(lower, "conectado") || strings.Contains(lower, "servidor http"):
-		return cCyan + line + cReset
+		return cCyan
 	default:
-		return cWhite + line + cReset
+		return cWhite
 	}
+}
+
+func wrapLogLine(line string, maxWidth int) []string {
+	clean := strings.TrimRight(strings.ReplaceAll(strings.ReplaceAll(line, "\r", ""), "\t", " "), "\n")
+	if maxWidth <= 4 {
+		return []string{clean}
+	}
+	runes := []rune(clean)
+	if len(runes) <= maxWidth {
+		return []string{clean}
+	}
+
+	var out []string
+	first := true
+	for len(runes) > 0 {
+		prefix := ""
+		avail := maxWidth
+		if !first {
+			prefix = "  "
+			avail = maxWidth - 2
+		}
+		if len(runes) <= avail {
+			out = append(out, prefix+string(runes))
+			break
+		}
+		// Prefer breaking at a space so words/errors remain readable.
+		cut := -1
+		for i := avail; i > 0; i-- {
+			if runes[i] == ' ' {
+				cut = i
+				break
+			}
+		}
+		if cut <= 0 {
+			cut = avail
+			out = append(out, prefix+string(runes[:cut]))
+			runes = runes[cut:]
+		} else {
+			out = append(out, prefix+string(runes[:cut]))
+			runes = runes[cut+1:]
+		}
+		for len(runes) > 0 && runes[0] == ' ' {
+			runes = runes[1:]
+		}
+		first = false
+	}
+	if len(out) == 0 {
+		return []string{""}
+	}
+	return out
 }
 
 func visibleWidth(s string) int {

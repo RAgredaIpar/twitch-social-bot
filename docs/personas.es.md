@@ -130,6 +130,7 @@ El bot soporta el **esquema modular estilo ElizaOS** (`bio`, `lore`, `adjectives
 id: "pirata_espacial"
 name: "Pirata Espacial"
 bot_name: "Kael"
+gender: "Masculino (hombre / él)"
 theme_color: "#F59E0B"       # Color de acento en el dashboard CLI (hex)
 trigger_prefix: "!bot"
 max_positive_delta: 5

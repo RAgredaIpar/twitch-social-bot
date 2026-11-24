@@ -719,6 +719,10 @@ func runCreatePersonaWizard(in io.Reader, reader *bufio.Reader, out io.Writer, e
 	if err != nil {
 		return err
 	}
+	gender, err := promptField(reader, out, loc.Get("cli_persona_gender_prompt"), "", false)
+	if err != nil {
+		return err
+	}
 	desc, err := promptField(reader, out, loc.Get("cli_persona_desc_prompt"), "Eres "+botName+", un co-host carismático y directo del canal.", false)
 	if err != nil {
 		return err
@@ -772,7 +776,7 @@ func runCreatePersonaWizard(in io.Reader, reader *bufio.Reader, out io.Writer, e
 	}
 
 	targetFile := filepath.Join(personaDir, id+".yaml")
-	if err := writeCustomPersonaYAML(targetFile, id, name, botName, themeHex, desc, avatarRows); err != nil {
+	if err := writeCustomPersonaYAML(targetFile, id, name, botName, gender, themeHex, desc, avatarRows); err != nil {
 		return err
 	}
 
@@ -928,7 +932,7 @@ func sanitizePersonaID(raw string) string {
 	return strings.Trim(sb.String(), "_")
 }
 
-func writeCustomPersonaYAML(path, id, name, botName, themeColor, desc string, avatarRows []string) error {
+func writeCustomPersonaYAML(path, id, name, botName, gender, themeColor, desc string, avatarRows []string) error {
 	var bio []string
 	for _, line := range strings.Split(desc, "\n") {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
@@ -939,6 +943,7 @@ func writeCustomPersonaYAML(path, id, name, botName, themeColor, desc string, av
 		ID:               id,
 		Name:             name,
 		BotName:          botName,
+		Gender:           strings.TrimSpace(gender),
 		ThemeColor:       themeColor,
 		TriggerPrefix:    "!bot",
 		MaxPositiveDelta: 5,

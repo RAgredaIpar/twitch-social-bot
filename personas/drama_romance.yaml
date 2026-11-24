@@ -1,6 +1,7 @@
 id: "drama_romance"
 name: "Drama y Romance"
 bot_name: "Celeste"
+gender: "Femenino (mujer / ella)"
 theme_color: "#F472B6"
 trigger_prefix: "!bot"
 max_positive_delta: 5

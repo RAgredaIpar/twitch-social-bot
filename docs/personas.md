@@ -130,6 +130,7 @@ The bot supports the **ElizaOS-style modular schema** (`bio`, `lore`, `adjective
 id: "space_pirate"
 name: "Space Pirate"
 bot_name: "Kael"
+gender: "Male (he / him)"
 theme_color: "#F59E0B"       # Live CLI dashboard accent color (hex)
 trigger_prefix: "!bot"
 max_positive_delta: 5

@@ -82,6 +82,7 @@ type PersonaSpec struct {
 	ID               string           `json:"id"`
 	Name             string           `json:"name"`
 	BotName          string           `json:"bot_name"`
+	Gender           string           `json:"gender,omitempty"`
 	TriggerPrefix    string           `json:"trigger_prefix"`
 	MaxPositiveDelta int              `json:"max_positive_delta"`
 	MaxNegativeDelta int              `json:"max_negative_delta"`
