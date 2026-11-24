@@ -180,7 +180,7 @@ make fmt           # Runs gofmt across all repository packages
 | `PERSONA_FILE` | String | `personas/cohost_amigos.yaml` | Initial YAML persona loaded at startup. |
 | `STORE_PATH` | String | `data/social.db` | Local filesystem path for the atomic JSON social database. |
 | `GLOBAL_COOLDOWN_MS` | Integer | `3000` | Global broadcast cooldown between bot messages in milliseconds. |
-| `USER_COOLDOWN_MS` | Integer | `15000` | Per-viewer rate limit cooldown in milliseconds. |
+| `USER_COOLDOWN_MS` | Integer | `8000` | Per-viewer rate limit cooldown in milliseconds. |
 | `ROOM_BUFFER_SIZE` | Integer | `25` | Maximum sliding window capacity of ambient chat messages retained. |
 | `MAX_VIEWER_FACTS` | Integer | `15` | Default maximum quantity of episodic facts stored per viewer. |
 | `ROOM_BUFFER_MAX_AGE_SEC` | Integer | `600` | Maximum age in seconds before ambient chat messages expire. |

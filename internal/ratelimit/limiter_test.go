@@ -163,3 +163,36 @@ func TestCooldownLimiter_Concurrency(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestCooldownLimiter_BroadcasterBypassesUserCooldown(t *testing.T) {
+	clk := domain.NewFakeClock(time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC))
+	lim := ratelimit.NewCooldownLimiter(clk, 3*time.Second, 8*time.Second)
+
+	if !lim.AllowForUser("streamer_1", true) {
+		t.Fatal("expected first broadcaster message allowed")
+	}
+	// Within 3s global cooldown: still blocked
+	clk.Advance(2 * time.Second)
+	if lim.AllowForUser("streamer_1", true) {
+		t.Fatal("expected broadcaster blocked within 3s global cooldown")
+	}
+	// After 4s total (> 3s global, < 8s user): broadcaster allowed
+	clk.Advance(2 * time.Second)
+	if !lim.AllowForUser("streamer_1", true) {
+		t.Fatal("expected broadcaster allowed after global cooldown despite 8s user cooldown")
+	}
+
+	// Regular viewer still obeys 8s per-viewer cooldown
+	clk.Advance(4 * time.Second)
+	if !lim.AllowForUser("viewer_1", false) {
+		t.Fatal("expected regular viewer first message allowed")
+	}
+	clk.Advance(4 * time.Second)
+	if lim.AllowForUser("viewer_1", false) {
+		t.Fatal("expected regular viewer still blocked within 8s user cooldown")
+	}
+	clk.Advance(5 * time.Second)
+	if !lim.AllowForUser("viewer_1", false) {
+		t.Fatal("expected regular viewer allowed after 8s user cooldown")
+	}
+}

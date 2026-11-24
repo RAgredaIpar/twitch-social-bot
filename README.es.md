@@ -180,7 +180,7 @@ make fmt           # Ejecuta gofmt en todos los paquetes del repositorio
 | `PERSONA_FILE` | String | `personas/cohost_amigos.yaml` | Personalidad cargada por defecto al arrancar. |
 | `STORE_PATH` | String | `data/social.db` | Ruta de la base de datos social JSON atómica. |
 | `GLOBAL_COOLDOWN_MS` | Integer | `3000` | Tiempo mínimo entre respuestas globales del bot en milisegundos. |
-| `USER_COOLDOWN_MS` | Integer | `15000` | Tiempo de espera por espectador en milisegundos. |
+| `USER_COOLDOWN_MS` | Integer | `8000` | Tiempo de espera por espectador en milisegundos. |
 | `ROOM_BUFFER_SIZE` | Integer | `25` | Capacidad de ventana deslizante de mensajes ambientales recientes. |
 | `MAX_VIEWER_FACTS` | Integer | `15` | Cantidad máxima por defecto de hechos episódicos guardados por espectador. |
 | `ROOM_BUFFER_MAX_AGE_SEC` | Integer | `600` | Antigüedad máxima en segundos antes de expirar mensajes ambientales. |

@@ -29,6 +29,12 @@ func NewCooldownLimiter(clock domain.Clock, globalCooldown, userCooldown time.Du
 }
 
 func (l *CooldownLimiter) Allow(userID string) bool {
+	return l.AllowForUser(userID, false)
+}
+
+// AllowForUser enforces the global cooldown and, unless bypassUserCooldown is true
+// (e.g. for the channel broadcaster), also enforces the per-viewer cooldown.
+func (l *CooldownLimiter) AllowForUser(userID string, bypassUserCooldown bool) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -38,14 +44,16 @@ func (l *CooldownLimiter) Allow(userID string) bool {
 		return false
 	}
 
-	if l.userCooldown > 0 {
+	if !bypassUserCooldown && l.userCooldown > 0 {
 		if lastUser, ok := l.lastUsers[userID]; ok && now.Sub(lastUser) < l.userCooldown {
 			return false
 		}
 	}
 
 	l.lastGlobal = now
-	l.lastUsers[userID] = now
+	if !bypassUserCooldown {
+		l.lastUsers[userID] = now
+	}
 	return true
 }
 

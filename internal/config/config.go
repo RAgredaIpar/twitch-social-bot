@@ -110,7 +110,7 @@ func LoadRaw(envFile string) (*Config, error) {
 		return nil, fmt.Errorf("invalid GLOBAL_COOLDOWN_MS value: %q", gcStr)
 	}
 
-	ucStr := get("USER_COOLDOWN_MS", "15000")
+	ucStr := get("USER_COOLDOWN_MS", "8000")
 	if ms, err := strconv.Atoi(ucStr); err == nil {
 		cfg.UserCooldown = time.Duration(ms) * time.Millisecond
 	} else if d, err := time.ParseDuration(ucStr); err == nil {

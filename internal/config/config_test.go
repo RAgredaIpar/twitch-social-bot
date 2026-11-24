@@ -115,8 +115,8 @@ func TestConfig_Defaults(t *testing.T) {
 	if cfg.GlobalCooldown != 3*time.Second {
 		t.Errorf("expected GlobalCooldown 3s, got %v", cfg.GlobalCooldown)
 	}
-	if cfg.UserCooldown != 15*time.Second {
-		t.Errorf("expected UserCooldown 15s, got %v", cfg.UserCooldown)
+	if cfg.UserCooldown != 8*time.Second {
+		t.Errorf("expected UserCooldown 8s, got %v", cfg.UserCooldown)
 	}
 	if cfg.RoomBufferSize != 25 {
 		t.Errorf("expected RoomBufferSize 25, got %d", cfg.RoomBufferSize)

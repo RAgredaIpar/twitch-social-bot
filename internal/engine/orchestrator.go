@@ -393,7 +393,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		return nil
 	}
 
-	if o.cfg.Limiter != nil && !o.cfg.Limiter.Allow(msg.UserID) {
+	if o.cfg.Limiter != nil && !o.cfg.Limiter.AllowForUser(msg.UserID, msg.IsBroadcaster) {
 		return nil
 	}
 
