@@ -86,6 +86,55 @@ func SelectRelevantFacts(facts []string, query string, topK, recentK int) []stri
 	return out
 }
 
+// SelectContextualFacts selects relevant + recent facts via SelectRelevantFacts and
+// cools down any fact that the bot ALREADY referenced in lastBotReply when the viewer's
+// current query is unrelated to that fact (preventing back-to-back shoehorning).
+func SelectContextualFacts(facts []string, query, lastBotReply string, topK, recentK int) []string {
+	base := SelectRelevantFacts(facts, query, topK, recentK)
+	if len(base) == 0 || strings.TrimSpace(lastBotReply) == "" {
+		return base
+	}
+
+	replyKeywords := significantKeywords(lastBotReply)
+	out := make([]string, 0, len(base))
+	for _, f := range base {
+		if strings.TrimSpace(query) != "" && CosineSimilarity(query, f) >= 0.12 {
+			out = append(out, f)
+			continue
+		}
+		if CosineSimilarity(lastBotReply, f) >= 0.18 || sharesSignificantKeyword(f, replyKeywords) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+func significantKeywords(text string) map[string]struct{} {
+	words := strings.Fields(normalizeText(text))
+	res := make(map[string]struct{}, len(words))
+	for _, w := range words {
+		if len([]rune(w)) >= 4 && !memoryStopwords[w] {
+			res[w] = struct{}{}
+		}
+	}
+	return res
+}
+
+func sharesSignificantKeyword(fact string, kw map[string]struct{}) bool {
+	if len(kw) == 0 {
+		return false
+	}
+	for _, w := range strings.Fields(normalizeText(fact)) {
+		if len([]rune(w)) >= 4 && !memoryStopwords[w] {
+			if _, ok := kw[w]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func embedText(text string) map[string]float64 {
 	words := strings.Fields(normalizeText(text))
 	if len(words) == 0 {

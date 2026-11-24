@@ -24,6 +24,7 @@ messages:
   llm_rule_4: "6. Responde SIEMPRE en formato JSON estricto con el siguiente esquema:"
   llm_anti_repeat: "Evita repetir las mismas palabras, muletillas o inicios de frase que ya usaste en tus últimos mensajes."
   llm_dynamic_antirepeat: "[VARIEDAD LÉXICA]: En tus últimos turnos repetiste: %s. NO uses ninguna de esas palabras o muletillas en esta respuesta; varía tu expresión natural."
+  llm_passive_facts_hint: "[MEMORIA PASIVA]: Los datos en 'Facts' son solo contexto de fondo; úsalos ÚNICAMENTE cuando tengan relación directa con lo que dice el espectador ahora o te pregunte por ellos. NUNCA metas temas viejos con calzador."
   llm_cross_memory: "Si encaja con el momento, puedes conectar o bromear con lo que dijo otro espectador arriba en [HILO_RECIENTE_SALA]."
   llm_pacing_minimal: "[RITMO DE ESTE TURNO]: El mensaje del espectador es muy breve; responde igual de breve (1 a 4 palabras máximo o una reacción seca)."
   llm_pacing_short: "[RITMO DE ESTE TURNO]: Responde MUY corto y directo (2 a 8 palabras máximo, seco/cortante o al grano)."

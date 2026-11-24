@@ -86,3 +86,22 @@ func TestBuildUserPrompt_DynamicAntiRepeatAndBroadcasterChannelName(t *testing.T
 		t.Fatalf("expected dynamic lexical variety directive for 'xd', got:\n%s", prompt)
 	}
 }
+
+func TestDetectRepeatedTermsForTurn_FlagsUnprompted2TurnTopicLoop(t *testing.T) {
+	turns := []domain.ConversationTurn{
+		{UserMessage: "tirate un chiste", BotReply: "tu yasuo, ese es el chiste"},
+		{UserMessage: "mi comida favorita es el ceviche", BotReply: "ceviche anotado, pero no te salva del yasuo"},
+	}
+
+	// Viewer talks about mufa (does NOT mention yasuo) -> "yasuo" repeated in last 2 replies must be flagged!
+	flagged := llm.DetectRepeatedTermsForTurn(turns, "anulo mufa para la siguiente partida")
+	if !slices.Contains(flagged, "yasuo") {
+		t.Fatalf("expected unprompted 2-turn 'yasuo' topic to be flagged, got %v", flagged)
+	}
+
+	// If viewer explicitly asks about yasuo, do NOT block "yasuo".
+	notFlagged := llm.DetectRepeatedTermsForTurn(turns, "por qué odias tanto a mi yasuo")
+	if slices.Contains(notFlagged, "yasuo") {
+		t.Fatalf("did not expect 'yasuo' flagged when viewer explicitly asks about it, got %v", notFlagged)
+	}
+}

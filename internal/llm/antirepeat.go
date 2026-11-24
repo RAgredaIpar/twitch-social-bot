@@ -19,10 +19,16 @@ var stopWordsESEN = map[string]struct{}{
 }
 
 // DetectRepeatedTerms inspects recent bot replies (up to last 5) and returns
-// overused edge fillers (appearing at start/end of >= 2 replies, including
-// 1-char trailing chat tags like "p" or "f") and repeated content words
-// (appearing across >= 3 replies), capped at 4 terms.
+// overused edge fillers and repeated content words, capped at 4 terms.
 func DetectRepeatedTerms(turns []domain.ConversationTurn) []string {
+	return DetectRepeatedTermsForTurn(turns, "")
+}
+
+// DetectRepeatedTermsForTurn inspects recent bot replies (up to last 5) and returns:
+// 1) overused edge fillers (start/end of >= 2 replies, including 1-char trailing tags like "p" or "f"),
+// 2) repeated content words (>= 3 across last 5 replies), and
+// 3) unprompted topic loops (>= 2 across last 3 replies for >= 4-char words not mentioned by currentViewerMsg).
+func DetectRepeatedTermsForTurn(turns []domain.ConversationTurn, currentViewerMsg string) []string {
 	if len(turns) < 2 {
 		return nil
 	}
@@ -30,8 +36,14 @@ func DetectRepeatedTerms(turns []domain.ConversationTurn) []string {
 		turns = turns[len(turns)-5:]
 	}
 
+	viewerWords := make(map[string]struct{})
+	for _, tok := range tokenizeNormalizedWords(currentViewerMsg) {
+		viewerWords[tok] = struct{}{}
+	}
+
 	edgeCounts := make(map[string]int)
 	bodyCounts := make(map[string]int)
+	recent3BodyCounts := make(map[string]int)
 	var order []string
 	seenOrder := make(map[string]struct{})
 	recordCandidate := func(tok string) {
@@ -41,7 +53,12 @@ func DetectRepeatedTerms(turns []domain.ConversationTurn) []string {
 		}
 	}
 
-	for _, turn := range turns {
+	recent3Start := len(turns) - 3
+	if recent3Start < 0 {
+		recent3Start = 0
+	}
+
+	for idx, turn := range turns {
 		tokens := tokenizeNormalizedWords(turn.BotReply)
 		if len(tokens) == 0 {
 			continue
@@ -74,6 +91,9 @@ func DetectRepeatedTerms(turns []domain.ConversationTurn) []string {
 		}
 		for tok := range seenInTurn {
 			bodyCounts[tok]++
+			if idx >= recent3Start && len([]rune(tok)) >= 4 {
+				recent3BodyCounts[tok]++
+			}
 			recordCandidate(tok)
 		}
 	}
@@ -81,7 +101,10 @@ func DetectRepeatedTerms(turns []domain.ConversationTurn) []string {
 	var flagged []string
 	flaggedSet := make(map[string]struct{})
 	for _, tok := range order {
-		if edgeCounts[tok] >= 2 || bodyCounts[tok] >= 3 {
+		_, mentionedByViewer := viewerWords[tok]
+		isEdgeLoop := edgeCounts[tok] >= 2
+		isBodyLoop := !mentionedByViewer && (bodyCounts[tok] >= 3 || recent3BodyCounts[tok] >= 2)
+		if isEdgeLoop || isBodyLoop {
 			if _, exists := flaggedSet[tok]; !exists {
 				flaggedSet[tok] = struct{}{}
 				flagged = append(flagged, tok)

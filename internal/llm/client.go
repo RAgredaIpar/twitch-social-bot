@@ -305,9 +305,19 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	} else {
 		b.WriteString("- Earned Title: none\n")
 	}
+	var lastBotReply string
+	if len(input.Profile.RecentTurns) > 0 {
+		lastBotReply = input.Profile.RecentTurns[len(input.Profile.RecentTurns)-1].BotReply
+	}
+	hasFacts := false
 	if len(input.Profile.Facts) > 0 {
-		relevantFacts := social.SelectRelevantFacts(input.Profile.Facts, input.ViewerMessage, 5, 3)
-		b.WriteString(fmt.Sprintf("- Facts: %s\n", strings.Join(relevantFacts, "; ")))
+		relevantFacts := social.SelectContextualFacts(input.Profile.Facts, input.ViewerMessage, lastBotReply, 5, 3)
+		if len(relevantFacts) > 0 {
+			hasFacts = true
+			b.WriteString(fmt.Sprintf("- Facts: %s\n", strings.Join(relevantFacts, "; ")))
+		} else {
+			b.WriteString(fmt.Sprintf("- Facts: %s\n", loc.Get("llm_user_no_facts")))
+		}
 	} else {
 		b.WriteString(fmt.Sprintf("- Facts: %s\n", loc.Get("llm_user_no_facts")))
 	}
@@ -324,7 +334,10 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	pacingKey, _ := pickTurnPacingKey(input.ViewerMessage)
 	b.WriteString(loc.Get(pacingKey) + "\n")
 	b.WriteString(loc.Get("llm_anti_repeat") + "\n")
-	if repeated := DetectRepeatedTerms(input.Profile.RecentTurns); len(repeated) > 0 {
+	if hasFacts {
+		b.WriteString(loc.Get("llm_passive_facts_hint") + "\n")
+	}
+	if repeated := DetectRepeatedTermsForTurn(input.Profile.RecentTurns, input.ViewerMessage); len(repeated) > 0 {
 		quoted := make([]string, len(repeated))
 		for i, term := range repeated {
 			quoted[i] = fmt.Sprintf("%q", term)

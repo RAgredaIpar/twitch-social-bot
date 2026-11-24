@@ -39,3 +39,36 @@ func TestSelectRelevantFacts_SemanticAndRecent(t *testing.T) {
 		}
 	}
 }
+
+func TestSelectContextualFacts_CoolsDownFactJustMentionedByBot(t *testing.T) {
+	facts := []string{
+		"Tiene un perro llamado Firulais",
+		"Mainea Yasuo en LoL",
+		"Su comida favorita es el ceviche",
+	}
+
+	// Bot just joked about Yasuo; viewer now talks about ceviche (unrelated to Yasuo).
+	got := social.SelectContextualFacts(
+		facts,
+		"acuerdate que mi comida favorita es el ceviche",
+		"tu yasuo, ese es el chiste",
+		5, 3,
+	)
+	if slices.Contains(got, "Mainea Yasuo en LoL") {
+		t.Fatalf("expected just-mentioned Yasuo fact to cool down on unrelated query, got: %v", got)
+	}
+	if !slices.Contains(got, "Su comida favorita es el ceviche") {
+		t.Fatalf("expected relevant ceviche fact to remain available, got: %v", got)
+	}
+
+	// If viewer explicitly asks about Yasuo right after, it MUST NOT be hidden.
+	gotAsked := social.SelectContextualFacts(
+		facts,
+		"qué build le armo a mi yasuo hoy?",
+		"tu yasuo, ese es el chiste",
+		5, 3,
+	)
+	if !slices.Contains(gotAsked, "Mainea Yasuo en LoL") {
+		t.Fatalf("expected Yasuo fact kept when viewer explicitly mentions Yasuo, got: %v", gotAsked)
+	}
+}
