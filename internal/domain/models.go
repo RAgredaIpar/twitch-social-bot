@@ -115,8 +115,9 @@ type PromptInput struct {
 	ViewerMessage string                  `json:"viewer_message"`
 	ViewerRole    string                  `json:"viewer_role,omitempty"`
 	CurrentMood   string                  `json:"current_mood,omitempty"`
-	StreamGame    string                  `json:"stream_game,omitempty"`
-	StreamTitle   string                  `json:"stream_title,omitempty"`
+	StreamGame      string                  `json:"stream_game,omitempty"`
+	StreamTitle     string                  `json:"stream_title,omitempty"`
+	BroadcasterName string                  `json:"broadcaster_name,omitempty"`
 }
 
 type ChannelInfo struct {

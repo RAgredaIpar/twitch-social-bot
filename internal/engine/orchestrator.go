@@ -451,17 +451,26 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 	viewerRole := resolveViewerRole(msg, profile)
 	currentMood := o.mood.Current()
 
+	broadcasterName := strings.TrimSpace(msg.BroadcasterName)
+	if broadcasterName == "" && msg.IsBroadcaster {
+		broadcasterName = strings.TrimSpace(msg.DisplayName)
+		if broadcasterName == "" {
+			broadcasterName = strings.TrimSpace(msg.Username)
+		}
+	}
+
 	decision, err := o.cfg.LLM.Generate(ctx, domain.PromptInput{
-		Persona:       spec,
-		Profile:       profile,
-		CurrentTier:   currentTier,
-		ActiveSlots:   slots,
-		RecentRoom:    recentRoom,
-		ViewerMessage: cleanInput,
-		ViewerRole:    viewerRole,
-		CurrentMood:   currentMood,
-		StreamGame:    streamInfo.GameName,
-		StreamTitle:   streamInfo.Title,
+		Persona:         spec,
+		Profile:         profile,
+		CurrentTier:     currentTier,
+		ActiveSlots:     slots,
+		RecentRoom:      recentRoom,
+		ViewerMessage:   cleanInput,
+		ViewerRole:      viewerRole,
+		CurrentMood:     currentMood,
+		StreamGame:      streamInfo.GameName,
+		StreamTitle:     streamInfo.Title,
+		BroadcasterName: broadcasterName,
 	})
 	if err != nil {
 		return fmt.Errorf("llm generate: %w", err)

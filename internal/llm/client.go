@@ -226,8 +226,19 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	}
 	var b strings.Builder
 
-	if input.StreamGame != "" || input.StreamTitle != "" {
+	channelName := strings.TrimSpace(input.BroadcasterName)
+	if channelName == "" && input.ViewerRole == "broadcaster" {
+		channelName = strings.TrimSpace(input.Profile.DisplayName)
+		if channelName == "" {
+			channelName = strings.TrimSpace(input.Profile.Username)
+		}
+	}
+
+	if channelName != "" || input.StreamGame != "" || input.StreamTitle != "" {
 		b.WriteString(loc.Get("llm_stream_context_header") + "\n")
+		if channelName != "" {
+			b.WriteString(fmt.Sprintf("- Streamer: %s\n", channelName))
+		}
 		if input.StreamGame != "" {
 			b.WriteString(fmt.Sprintf("- Game/Category: %s\n", input.StreamGame))
 		}
@@ -277,7 +288,14 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	b.WriteString(loc.Get("llm_user_viewer_profile") + "\n")
 	b.WriteString(fmt.Sprintf("- Viewer: %s (@%s)\n", input.Profile.DisplayName, input.Profile.Username))
 	if input.ViewerRole != "" {
-		b.WriteString(fmt.Sprintf("- Role: %s\n", loc.Get("llm_role_"+input.ViewerRole)))
+		if input.ViewerRole == "broadcaster" && channelName != "" {
+			b.WriteString(fmt.Sprintf("- Role: %s\n", loc.Format("llm_role_broadcaster_named", channelName, channelName)))
+		} else {
+			b.WriteString(fmt.Sprintf("- Role: %s\n", loc.Get("llm_role_"+input.ViewerRole)))
+		}
+	}
+	if input.ViewerRole == "broadcaster" && input.Profile.Affinity >= 0 {
+		b.WriteString(loc.Get("llm_broadcaster_familiarity") + "\n")
 	}
 	b.WriteString(fmt.Sprintf("- Affinity: %d\n", input.Profile.Affinity))
 	b.WriteString(fmt.Sprintf("- Tier: %s (%s)\n", input.CurrentTier.Name, input.CurrentTier.ID))
@@ -303,13 +321,20 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	}
 	b.WriteString("\n")
 
-	pacingKey, isMinimal := pickTurnPacingKey(input.ViewerMessage)
+	pacingKey, _ := pickTurnPacingKey(input.ViewerMessage)
 	b.WriteString(loc.Get(pacingKey) + "\n")
 	b.WriteString(loc.Get("llm_anti_repeat") + "\n")
+	if repeated := DetectRepeatedTerms(input.Profile.RecentTurns); len(repeated) > 0 {
+		quoted := make([]string, len(repeated))
+		for i, term := range repeated {
+			quoted[i] = fmt.Sprintf("%q", term)
+		}
+		b.WriteString(loc.Format("llm_dynamic_antirepeat", strings.Join(quoted, ", ")) + "\n")
+	}
 	if len(input.RecentRoom) > 0 {
 		b.WriteString(loc.Get("llm_cross_memory") + "\n")
 	}
-	if !isMinimal && rand.IntN(100) < 25 {
+	if pacingKey == "llm_pacing_medium" && rand.IntN(100) < 10 {
 		b.WriteString(loc.Get("llm_follow_up_hint") + "\n")
 	}
 	b.WriteString("\n")
@@ -335,9 +360,9 @@ func pickTurnPacingKey(viewerMsg string) (string, bool) {
 	}
 	n := rand.IntN(100)
 	switch {
-	case n < 40:
+	case n < 50:
 		return "llm_pacing_short", false
-	case n < 80:
+	case n < 92:
 		return "llm_pacing_medium", false
 	default:
 		return "llm_pacing_long", false

@@ -51,7 +51,7 @@ func TestHumanizePrompts_MinimalMoodRoleAndStreamContext(t *testing.T) {
 		"Game/Category: Valorant",
 		"Title: Rankeds de noche",
 		"Current Mood: picado y más cortante",
-		"Role: Broadcaster (Dueño del canal)",
+		"Role: Streamer (Rhhhh_)",
 		"1 a 4 palabras máximo",
 		"[HILO_RECIENTE_SALA]",
 	}
