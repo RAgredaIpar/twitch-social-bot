@@ -267,6 +267,9 @@ func TestApplyDecision_RecentTurnsFIFO(t *testing.T) {
 	if res.RecentTurns[0].UserMessage != "m2" || res.RecentTurns[3].UserMessage != "m5" {
 		t.Fatalf("expected FIFO eviction of m1, got %+v", res.RecentTurns)
 	}
+	if res.RecentTurns[3].BotName != spec.BotName || res.RecentTurns[3].PersonaID != spec.ID {
+		t.Fatalf("expected newest turn attributed to %s/%s, got %+v", spec.BotName, spec.ID, res.RecentTurns[3])
+	}
 }
 
 func TestApplyDecision_SlotsSyncAndRevocation(t *testing.T) {

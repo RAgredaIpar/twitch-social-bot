@@ -321,10 +321,21 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	} else {
 		b.WriteString(fmt.Sprintf("- Facts: %s\n", loc.Get("llm_user_no_facts")))
 	}
+	hasOtherPersonaTurn := false
 	if len(input.Profile.RecentTurns) > 0 {
 		b.WriteString(loc.Get("llm_user_recent_turns") + "\n")
 		for _, turn := range input.Profile.RecentTurns {
-			b.WriteString(fmt.Sprintf("  * Viewer: %s\n    Bot: %s\n", turn.UserMessage, turn.BotReply))
+			speaker := strings.TrimSpace(turn.BotName)
+			if speaker == "" {
+				speaker = "Bot"
+			}
+			if input.Persona != nil {
+				if (turn.PersonaID != "" && turn.PersonaID != input.Persona.ID) ||
+					(turn.PersonaID == "" && turn.BotName != "" && !strings.EqualFold(turn.BotName, input.Persona.BotName)) {
+					hasOtherPersonaTurn = true
+				}
+			}
+			b.WriteString(fmt.Sprintf("  * Viewer: %s\n    %s: %s\n", turn.UserMessage, speaker, turn.BotReply))
 		}
 	} else {
 		b.WriteString(loc.Get("llm_user_recent_turns") + " " + loc.Get("llm_user_no_turns") + "\n")
@@ -336,6 +347,15 @@ func BuildUserPromptWithLocale(input domain.PromptInput, loc *i18n.Manager) stri
 	b.WriteString(loc.Get("llm_anti_repeat") + "\n")
 	if hasFacts {
 		b.WriteString(loc.Get("llm_passive_facts_hint") + "\n")
+	}
+	if hasOtherPersonaTurn && input.Persona != nil {
+		activeName := strings.TrimSpace(input.Persona.BotName)
+		if activeName == "" {
+			activeName = input.Persona.Name
+		}
+		if activeName != "" {
+			b.WriteString(loc.Format("llm_persona_switch_guard", activeName) + "\n")
+		}
 	}
 	if repeated := DetectRepeatedTermsForTurn(input.Profile.RecentTurns, input.ViewerMessage); len(repeated) > 0 {
 		quoted := make([]string, len(repeated))

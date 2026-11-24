@@ -30,6 +30,8 @@ type RoomMessage struct {
 type ConversationTurn struct {
 	UserMessage string    `json:"user_message"`
 	BotReply    string    `json:"bot_reply"`
+	BotName     string    `json:"bot_name,omitempty"`
+	PersonaID   string    `json:"persona_id,omitempty"`
 	Timestamp   time.Time `json:"timestamp"`
 }
 

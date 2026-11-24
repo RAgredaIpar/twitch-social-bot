@@ -124,3 +124,33 @@ func TestElizaOSPromptAndVectorFactSelection(t *testing.T) {
 		t.Fatalf("expected [MODO SEGURO +18] omitted when allowNSFW=true")
 	}
 }
+
+func TestBuildUserPrompt_PersonaAttributedTurnsAndSwitchGuard(t *testing.T) {
+	loc, err := i18n.NewManager(filepath.Join("..", "..", "locales"), "es")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mochi := &domain.PersonaSpec{ID: "cohost_amigos", BotName: "Mochi"}
+	prompt := llm.BuildUserPromptWithLocale(domain.PromptInput{
+		Persona:       mochi,
+		ViewerMessage: "ya volví contigo",
+		Profile: domain.ViewerProfile{
+			Username:    "viewer1",
+			DisplayName: "Viewer1",
+			RecentTurns: []domain.ConversationTurn{
+				{UserMessage: "hola dante", BotReply: "habla con respeto en esta mesa", BotName: "Dante", PersonaID: "clan_jerarquia"},
+				{UserMessage: "antiguo", BotReply: "turno legado sin nombre"},
+			},
+		},
+	}, loc)
+
+	if !strings.Contains(prompt, "Dante: habla con respeto en esta mesa") {
+		t.Fatalf("expected speaker label 'Dante:' in recent turns, got:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "Bot: turno legado sin nombre") {
+		t.Fatalf("expected legacy empty BotName to fall back to 'Bot:', got:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "[CAMBIO DE PERSONAJE]") || !strings.Contains(prompt, "Mochi") {
+		t.Fatalf("expected persona switch style guard for Mochi, got:\n%s", prompt)
+	}
+}

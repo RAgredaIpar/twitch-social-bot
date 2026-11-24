@@ -126,11 +126,18 @@ func (e *Engine) ApplyDecision(
 
 	// 4. RecentTurns (Max 4, FIFO eviction of oldest when > 4)
 	now := e.clock.Now()
+	var botName, personaID string
+	if spec != nil {
+		botName = strings.TrimSpace(spec.BotName)
+		personaID = strings.TrimSpace(spec.ID)
+	}
 	turns := make([]domain.ConversationTurn, len(profile.RecentTurns), len(profile.RecentTurns)+1)
 	copy(turns, profile.RecentTurns)
 	turns = append(turns, domain.ConversationTurn{
 		UserMessage: strings.TrimSpace(userMsg),
 		BotReply:    strings.TrimSpace(decision.Reply),
+		BotName:     botName,
+		PersonaID:   personaID,
 		Timestamp:   now,
 	})
 	if len(turns) > MaxRecentTurns {
