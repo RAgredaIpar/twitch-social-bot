@@ -203,8 +203,6 @@ func BuildSystemPromptWithOptions(spec *domain.PersonaSpec, loc *i18n.Manager, a
 	b.WriteString(loc.Get("llm_rule_1") + "\n")
 	b.WriteString(loc.Get("llm_rule_2") + "\n")
 	b.WriteString(loc.Get("llm_rule_3") + "\n")
-	b.WriteString(loc.Get("llm_rule_opinion") + "\n")
-	b.WriteString(loc.Get("llm_rule_no_ai") + "\n")
 	if !allowNSFW {
 		b.WriteString(loc.Get("llm_rule_sfw") + "\n")
 	}

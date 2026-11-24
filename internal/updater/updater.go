@@ -67,18 +67,63 @@ func (c *Config) defaults() {
 }
 
 const (
-	cleanupRetryAttempts = 20
-	cleanupRetryInterval = 150 * time.Millisecond
+	cleanupRetryAttempts = 30
+	cleanupRetryInterval = 500 * time.Millisecond
 )
 
-// CleanupOldBinary removes any leftover .old executable from a prior Windows self-update.
-// If the prior updater process is still exiting, removal retries briefly in the background.
+// CleanupOldBinary removes any leftover .old executables from prior Windows self-updates.
+// If the prior updater process is still exiting, removal retries in the background.
 func CleanupOldBinary() {
 	exe, err := os.Executable()
 	if err != nil {
 		return
 	}
-	CleanupPathWithRetry(exe+".old", cleanupRetryAttempts, cleanupRetryInterval)
+	CleanupOldBinariesForExe(exe)
+}
+
+// CleanupOldBinariesForExe removes exe+".old" and any stale "<exeBase>*.old*" siblings
+// in the same directory so repeated self-updates never leave orphaned .old files behind.
+func CleanupOldBinariesForExe(exe string) {
+	if strings.TrimSpace(exe) == "" {
+		return
+	}
+	seen := map[string]bool{}
+	schedule := func(p string) {
+		key := strings.ToLower(filepath.Clean(p))
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		CleanupPathWithRetry(p, cleanupRetryAttempts, cleanupRetryInterval)
+	}
+
+	schedule(exe + ".old")
+
+	dir := filepath.Dir(exe)
+	baseLower := strings.ToLower(filepath.Base(exe))
+	// Strip any trailing .old suffix in case the user launched from an old backup name.
+	for strings.HasSuffix(baseLower, ".old") {
+		baseLower = strings.TrimSuffix(baseLower, ".old")
+	}
+	if baseLower == "" {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		nameLower := strings.ToLower(entry.Name())
+		if nameLower == strings.ToLower(filepath.Base(exe)) {
+			continue
+		}
+		if strings.HasPrefix(nameLower, baseLower) && strings.Contains(nameLower, ".old") {
+			schedule(filepath.Join(dir, entry.Name()))
+		}
+	}
 }
 
 // CleanupPathWithRetry removes targetPath if present, retrying briefly in the background
@@ -382,7 +427,12 @@ func extractZipEntry(zf *zip.File, dest string, mode os.FileMode) error {
 
 func replaceExecutable(currentExe, newExe string) error {
 	oldExe := currentExe + ".old"
-	_ = os.Remove(oldExe)
+	if err := os.Remove(oldExe); err != nil && !os.IsNotExist(err) {
+		// If a previous .old file is still locked, move it aside to a unique .old name
+		// so the current update can proceed and CleanupOldBinariesForExe sweeps both on restart.
+		fallbackOld := fmt.Sprintf("%s.%d.old", currentExe, time.Now().UnixNano())
+		_ = os.Rename(oldExe, fallbackOld)
+	}
 	if err := os.Rename(currentExe, oldExe); err != nil {
 		return fmt.Errorf("backup current executable: %w", err)
 	}

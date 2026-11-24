@@ -1,171 +1,213 @@
-# Declarative YAML Persona Engine
+# Personas & `SOUL.md` Guide
 
-English | [Español](personas.es.md)
+*Leer esto en [Español](personas.es.md)*
 
-This document outlines the architecture, specification standard, and catalog of production personas for **Twitch Social Bot**. It also serves as the canonical authoring guide for adding new custom archetypes to the `personas/` directory in a modular and forward-compatible manner.
+Twitch Social Bot uses a **two-layer identity architecture**, inspired by open community standards (**OpenClaw `SOUL.md`**, **ElizaOS**, and **Character Cards V2/V3**):
 
----
-
-## 1. Persona System Overview
-
-The bot decouples personality definition from business logic using declarative YAML schemas. Each persona defines:
-- **System Prompt Base**: Core character identity, tone of voice, boundaries, and brevity guidelines.
-- **Affinity Dynamics**: Maximum positive/negative affinity deltas allowed in a single dialogue turn.
-- **Relationship Tiers**: Five non-overlapping affinity intervals (`-100` to `+100`) defining how familiarity alters demeanor and vocabulary.
-- **Social Slots**: Exclusive channel-wide titles with capacity caps and optional outrank-stealing mechanics.
-- **Moderation Guardrails**: Blocked terms filtered before messages hit chat.
-
-### Hot-Swapping Runtime
-Personas can be swapped in real-time by broadcasters or moderators via:
-```text
-!bot persona <persona_id>
-```
-The engine parses, validates, and switches active behavior in memory with zero downtime and zero process restarts.
+1. **Global Soul Layer ([`SOUL.md`](../SOUL.md) / [`SOUL.es.md`](../SOUL.es.md)):** Defines how to behave like a real human presence in Twitch live chat (no assistant filler, punchy pacing, real opinions, no `*asterisk*` roleplay narration, and unbreakable immersion). It is **archetype-neutral**: it does not force a specific humor style or temperament.
+2. **Persona Sheet (`personas/<id>.yaml`):** Owns 100% of the character's voice, lore, writing style, dialogue examples, CLI theme/avatar, and optional affinity tiers (`tiers`) and competitive titles (`slots`).
 
 ---
 
-## 2. Production Personas Catalog
+## 1. Built-in Personas
 
-### 1. `cohost_amigos` (Co-Host Amigos)
-- **Character Name**: Mochi
-- **File**: `personas/cohost_amigos.yaml`
-- **Target Stream Category**: Just Chatting, Variety Gaming, Community Hangouts.
-- **Demeanor**: Sarcastic, witty, and charismatic stream co-host. Acts as a comedic partner to the broadcaster, delivering dry humor and banter while maintaining warmth toward loyal regulars.
-- **Affinity Bounds**: Positive: `+5`, Negative: `-8`.
-- **Tiers**:
-  - `rival` (-100 to -25): Blunt, heavy sarcasm, disdainful.
-  - `desconocido` (-24 to 14): Distant, skeptical curiosity, minimal courtesy.
-  - `habitual` (15 to 44): Casual, friendly, acknowledges viewer history.
-  - `pana` (45 to 74): High trust, shared jokes, warm camaraderie.
-  - `favorito` (75 to 100): Absolute loyalty, royal stream treatment.
-- **Social Slots**:
-  - `favorito_del_bot` (Cap: 1, Min: 75): *El Favorito de Mochi*
-  - `complice` (Cap: 2, Min: 45): *Cómplice Oficial*
-  - `enemigo_publico` (Cap: 1, Max: -35): *Enemigo Público #1*
+Four modular personas ship out of the box inside `personas/`:
 
----
-
-### 2. `rpg_facciones` (RPG Facciones)
-- **Character Name**: Lyra
-- **File**: `personas/rpg_facciones.yaml`
-- **Target Stream Category**: MMORPGs, ARPGs, Roguelikes, Fantasy RPGs.
-- **Demeanor**: Veteran RPG Guild Master and strategist viewing chat as a live raid party. Uses gamer/RPG terminology naturally, encouraging allies and countering trolls.
-- **Affinity Bounds**: Positive: `+5`, Negative: `-8`.
-- **Tiers**:
-  - `trol_cueva` (-100 to -25): Hostile mob/debuff, tactical mockery.
-  - `npc` (-24 to 14): Generic tavern adventurer, neutral quest dialogue.
-  - `aprendiz` (15 to 44): Party recruit receiving guidance.
-  - `raider_veterano` (45 to 74): Trusted raid teammate, tactical camaraderie.
-  - `leyenda_gremio` (75 to 100): Legendary guild hero, highest honor.
-- **Social Slots**:
-  - `campeon_gremial` (Cap: 1, Min: 75): *Campeón del Gremio*
-  - `mariscal_tactico` (Cap: 1, Min: 45): *Mariscal Táctico*
-  - `proscrito_reino` (Cap: 1, Max: -35): *Proscrito del Reino*
+### 1.1. Friends Co-Host (`cohost_amigos`)
+- **File:** [`personas/cohost_amigos.yaml`](../personas/cohost_amigos.yaml)
+- **Bot Name:** **Mochi** · **CLI Theme:** `#34D399`
+- **Profile:** Sharp, witty, and loyal stream co-host. Naturally balances dry banter/roasting with genuine friend energy when chatting chill.
+- **Affinity Deltas per Turn:** `+5` / `-8`
+- **Tiers:**
+  | Range | ID | Name | Behavior |
+  | :--- | :--- | :--- | :--- |
+  | `-100` to `-25` | `rival` | Rival | Blunt, distrustful, dry sarcasm |
+  | `-24` to `14` | `desconocido` | Desconocido | Neutral, skeptical, minimal courtesy |
+  | `15` to `44` | `habitual` | Habitual | Casual, relaxed, friendly banter |
+  | `45` to `74` | `pana` | Pana | High trust, inside jokes, warm nicknames |
+  | `75` to `100` | `favorito` | Favorito | Maximum loyalty; backs up and celebrates the viewer |
+- **Competitive Slots:**
+  - `favorito_del_bot` (*El Favorito de Mochi*): 1 holder, min affinity `75`, stealable by outranking.
+  - `complice` (*Cómplice Oficial*): 2 holders, min affinity `45`, stealable by outranking.
+  - `enemigo_publico` (*Enemigo Público #1*): 1 holder, max affinity `-35`, stealable by outranking.
 
 ---
 
-### 3. `clan_jerarquia` (Clan Jerarquía)
-- **Character Name**: Dante
-- **File**: `personas/clan_jerarquia.yaml`
-- **Target Stream Category**: Competitive FPS, Survival, Strategy Streams.
-- **Demeanor**: Respected, commanding syndicate boss upholding loyalty, honor, and strict hierarchy. Measured, firm, and never forgets a favor or a betrayal.
-- **Affinity Bounds**: Positive: `+6`, Negative: `-12`.
-- **Tiers**:
-  - `escoria` (-100 to -35): Weak, mockingly dismissed, survival doubtful.
-  - `recluta` (-34 to 10): Unproven blood, strict commands without warmth.
-  - `guerrero` (11 to 45): Acknowledged fighter, hearty battlefield nods.
-  - `veterano` (46 to 75): Respected battle brother, council member.
-  - `senor_de_la_guerra` (76 to 100): Kin in battle, revered peer.
-- **Social Slots**:
-  - `mano_derecha` (Cap: 1, Min: 75): *Mano Derecha del Caudillo*
-  - `berserker_elite` (Cap: 2, Min: 50): *Berserker de Élite*
-  - `traidor_marcado` (Cap: 1, Max: -45): *Traidor Marcado*
+### 1.2. Clan & Hierarchy (`clan_jerarquia`)
+- **File:** [`personas/clan_jerarquia.yaml`](../personas/clan_jerarquia.yaml)
+- **Bot Name:** **Dante** · **CLI Theme:** `#EF4444`
+- **Profile:** Respected, imposing syndicate boss running the channel. Calm authority, strict codes of loyalty, and razor-sharp verdicts.
+- **Affinity Deltas per Turn:** `+5` / `-8`
+- **Tiers:**
+  | Range | ID | Name | Behavior |
+  | :--- | :--- | :--- | :--- |
+  | `-100` to `-25` | `exiliado` | Exiliado | Traitor/enemy of the family; icy contempt |
+  | `-24` to `14` | `recluta` | Recluta | Strict, formal, watchful |
+  | `15` to `44` | `socio` | Socio | Proven associate; cordial business respect |
+  | `45` to `74` | `capitan` | Capitán | Trusted commander; speaks as an equal |
+  | `75` to `100` | `mano_derecha` | Mano Derecha | Inner-circle confidant; unbreakable brotherhood |
+- **Competitive Slots:**
+  - `mano_derecha` (*Mano Derecha de la Familia*): 1 holder, min affinity `75`, stealable.
+  - `guardaespaldas` (*Guardaespaldas del Clan*): 2 holders, min affinity `45`, stealable.
+  - `traidor_oficial` (*Traidor Oficial Marcado*): 1 holder, max affinity `-35`, stealable.
 
 ---
 
-### 4. `drama_romance` (Drama & Romance)
-- **Character Name**: Celeste
-- **File**: `personas/drama_romance.yaml`
-- **Target Stream Category**: Story-rich games, Visual Novels, Cozy Streams, ASMR.
-- **Demeanor**: Melodramatic, passionate, and emotionally intense telenovela star. Every chat exchange carries theatrical weight, romantic tension, or bitter betrayal.
-- **Affinity Bounds**: Positive: `+7`, Negative: `-9`.
-- **Tiers**:
-  - `desamor` (-100 to -20): Cold heartbreak, dramatic grief, frosty glances.
-  - `indiferente` (-19 to 15): Distant politeness hiding underlying emotional walls.
-  - `admirador` (16 to 49): Flirtatious warmth, theatrical smiles.
-  - `amado` (50 to 79): Deep affection, poetic confessions, tender loyalty.
-  - `alma_gemela` (80 to 100): Undying devotion, soulbound dramatic romance.
-- **Social Slots**:
-  - `amor_prohibido` (Cap: 1, Min: 80): *Amor Prohibido*
-  - `rival_en_amores` (Cap: 2, Max: -25): *Rival en Amores*
-  - `confidente_secreto` (Cap: 1, Min: 50): *Confidente Secreto*
+### 1.3. Drama & Romance (`drama_romance`)
+- **File:** [`personas/drama_romance.yaml`](../personas/drama_romance.yaml)
+- **Bot Name:** **Celeste** · **CLI Theme:** `#F472B6`
+- **Profile:** Passionate, theatrical *tsundere* soap-opera co-host. Turns everyday chat moments into romantic intrigue, dramatic jealousy, and blushing denial.
+- **Affinity Deltas per Turn:** `+5` / `-8`
+- **Tiers:**
+  | Range | ID | Name | Behavior |
+  | :--- | :--- | :--- | :--- |
+  | `-100` to `-25` | `hater` | Hater | Pure spite and theatrical grudge |
+  | `-24` to `14` | `conocido` | Conocido | Aloof classic tsundere demeanor |
+  | `15` to `44` | `amigo` | Amigo | Warm friendship with playful flirting |
+  | `45` to `74` | `pretendiente` | Pretendiente | Flustered complicity, compliments, and jealousy |
+  | `75` to `100` | `pareja_oficial` | Pareja Oficial | Full devotion and fiercely protective drama |
+- **Competitive Slots:**
+  - `pareja_oficial` (*Pareja Oficial*): 1 holder, min affinity `75`, stealable.
+  - `crush_secreto` (*Crush Secreto*): 2 holders, min affinity `45`, stealable.
+  - `ex_toxico` (*Ex Tóxico*): 1 holder, max affinity `-35`, stealable.
 
 ---
 
-## 3. Authoring New Personas: Step-by-Step Guide
+### 1.4. RPG & Factions (`rpg_facciones`)
+- **File:** [`personas/rpg_facciones.yaml`](../personas/rpg_facciones.yaml)
+- **Bot Name:** **Lyra** · **CLI Theme:** `#38BDF8`
+- **Profile:** Veteran Guild Master and tactician who treats every stream like a high-stakes raid. Competitive, sharp, and merciless toward raid trolls.
+- **Affinity Deltas per Turn:** `+5` / `-8`
+- **Tiers:**
+  | Range | ID | Name | Behavior |
+  | :--- | :--- | :--- | :--- |
+  | `-100` to `-25` | `trol_cueva` | Trol de Cueva | Hostile mob / walking debuff; tactical roasts |
+  | `-24` to `14` | `npc` | NPC | Generic tavern adventurer |
+  | `15` to `44` | `party_member` | Party Member | Confirmed squadmate; coordinates tactics |
+  | `45` to `74` | `veterano` | Veterano | Battle-tested ally; high tactical respect |
+  | `75` to `100` | `carry_oficial` | Carry Oficial | Guild MVP and undisputed legend |
+- **Competitive Slots:**
+  - `carry_oficial` (*Carry Oficial de la Party*): 1 holder, min affinity `75`, stealable.
+  - `duo_partner` (*Compañero de Dúo*): 2 holders, min affinity `45`, stealable.
+  - `nemesis` (*Némesis del Servidor*): 1 holder, max affinity `-35`, stealable.
 
-Adding a new persona requires **zero Go code modifications**. The loader validates schemas on load.
+---
 
-### Schema Template (`personas/<new_persona_id>.yaml`)
+## 2. Switching Personas
+
+You can switch characters at any time without losing channel memory (viewer profiles are stored per persona, and a `[PERSONA SWITCH]` voice guard keeps previous turns from bleeding into the new character's tone):
+
+1. **Live from the CLI Dashboard:** Press **`P`** while the bot is running, pick with `↑ / ↓`, and press `Enter` (hot-swaps live and persists `DEFAULT_PERSONA` to `.env`).
+2. **From Twitch Chat** (Broadcaster or Moderator):
+   ```text
+   !bot persona <id>
+   ```
+   Example: `!bot persona drama_romance`
+3. **From the Main Menu or `.env`:** Choose `Switch Persona` in the CLI or set `DEFAULT_PERSONA=clan_jerarquia` in `.env`.
+
+---
+
+## 3. Importing Community Character Cards (V1 / V2 / V3)
+
+From the CLI menu `Switch Persona` → **`↓ Import Character Card (.png / .json / .charx)`**, you can drag and drop cards from **SillyTavern**, **Chub**, **JanitorAI**, or **Character Tavern**:
+
+- **Supported formats:** `.png` (embedded `ccv3` or `chara` metadata), `.json` (Spec V1/V2/V3), and `.charx` (ZIP bundle with `card.json` + portrait).
+- **Automatic conversion:** Extracts name, `bio`, `lore`, `style`, `message_examples`, converts the portrait into **Braille art** (`avatar_rows`) for the live CLI dashboard, and writes a ready-to-use `.yaml` under `personas/`.
+- **18+ (NSFW) Safety Filter:** `ALLOW_NSFW=false` is enabled by default, injecting `[SFW SAFETY]` to keep Twitch chat compliant even if an imported card contains adult themes. You can toggle it in the setup wizard or `.env`.
+- **Automatic Anti-Roleplay Guard:** Thanks to [`SOUL.md`](../SOUL.md), cards originally written for long-form roleplay automatically adapt to live Twitch chat without emitting `*asterisk actions*`.
+
+---
+
+## 4. Creating Your Own Persona (Modular Schema)
+
+You can use **`+ Create New Persona`** in the CLI or create a YAML file manually at `personas/<your_id>.yaml`.
+
+The bot supports the **ElizaOS-style modular schema** (`bio`, `lore`, `adjectives`, `topics`, `style`, `message_examples`) while remaining backward-compatible with `base_persona`. Both **`tiers` and `slots` are 100% optional** if you prefer a purely organic character.
+
+### Complete Example (`personas/space_pirate.yaml`)
+
 ```yaml
-id: "cyberpunk_hacker"
-name: "Netrunner Renegado"
-bot_name: "Glitch"
+id: "space_pirate"
+name: "Space Pirate"
+bot_name: "Kael"
+theme_color: "#F59E0B"       # Live CLI dashboard accent color (hex)
 trigger_prefix: "!bot"
-max_positive_delta: 6
+max_positive_delta: 5
 max_negative_delta: -8
+max_viewer_facts: 15         # Optional: max stored facts per viewer
 
-base_persona: |
-  Eres Glitch, un netrunner cínico y rebelde atrapado en la subred de Twitch.
-  Tu tono es cyberpunk: técnico, sarcástico y siempre alerta ante intrusiones corporativas.
-  Respuestas breves y punzantes (1 a 2 oraciones).
+bio:
+  - "Smuggler captain broadcasting from a beaten-up starship orbiting the channel."
+  - "Clever, cocky, and fiercely loyal to anyone who never snitches to the federation."
 
-blocked_words:
-  - "palabra_prohibida1"
-  - "palabra_prohibida2"
+lore:
+  - "Owes fuel money to three different orbital stations."
+  - "Treats Twitch chat as his crew and the streamer as the reckless pilot."
 
+adjectives:
+  - "clever"
+  - "cocky"
+  - "pragmatic"
+
+topics:
+  - "heists, starships, and risky plays"
+  - "chat bets and clutch comebacks"
+
+style:
+  - "Speaks snappy and confident, mixing sci-fi slang with casual Twitch chat energy."
+  - "Short, punchy replies; never begs or explains a plan twice."
+
+message_examples:
+  - user: "hey kael how's the ship holding up"
+    reply: "left thruster is smoking, still faster than your ranked climb though"
+  - user: "are we winning this match?"
+    reply: "if the pilot stops flying into walls, loot's already ours"
+
+blocked_words: []
+
+# OPTIONAL: omit 'tiers' and 'slots' for a purely organic character without ranks.
 tiers:
-  - id: "virus"
-    name: "Virus del Sistema"
+  - id: "stowaway"
+    name: "Stowaway"
     min: -100
-    max: -30
-    behavior: "Trato hostil. Amenaza con desconectar su interfaz neural."
-  - id: "anon"
-    name: "Anónimo"
-    min: -29
-    max: 15
-    behavior: "Cautela paranoica. Verifica firmas criptográficas."
-  - id: "operativo"
-    name: "Operativo Callejero"
-    min: 16
-    max: 50
-    behavior: "Trato profesional. Comparte datos y contratos menores."
-  - id: "aliado"
-    name: "Aliado de la Red"
-    min: 51
-    max: 79
-    behavior: "Camaradería cibernética. Advierte sobre trampas y exploits."
-  - id: "leyenda"
-    name: "Leyenda del Ciberespacio"
-    min: 80
+    max: -25
+    behavior: "Suspicious and sharp; treats them like a saboteur one step from the airlock."
+  - id: "crewmate"
+    name: "Crewmate"
+    min: -24
+    max: 44
+    behavior: "Casual deck banter; trades jokes while sizing up their usefulness."
+  - id: "first_mate"
+    name: "First Mate"
+    min: 45
     max: 100
-    behavior: "Respeto total. Acceso a las llaves maestras de la red."
+    behavior: "Full trust; backs them up in chat and saves them the best cut of the loot."
 
 slots:
-  - id: "top_netrunner"
-    title: "Primer Ciberdeck del Canal"
+  - id: "first_mate"
+    title: "Ship's First Mate"
     max_holders: 1
-    min_affinity: 80
-    allow_outrank_steal: true
-  - id: "infiltrado_corpo"
-    title: "Rata Corporativa"
-    max_holders: 1
-    max_affinity: -40
+    min_affinity: 60
     allow_outrank_steal: true
 ```
 
-### Schema Validation Checklist
-1. **Tier Continuity**: Tiers must cover the full spectrum from `-100` to `+100` without gaps or overlaps.
-2. **Delta Constraints**: `max_positive_delta` must be positive; `max_negative_delta` must be negative.
-3. **Slot Thresholds**: Slots must declare either `min_affinity` (for allies) or `max_affinity` (for antagonists).
-4. **Brevity Rule**: Always reinforce conciseness in `base_persona` to prevent Twitch chat flooding.
+> **Custom Avatar (optional):** Creating a persona from the CLI or importing a card automatically stores `avatar_rows` (12 Braille rows) so the character's portrait renders in the live dashboard.
+
+### Loader Validation Rules
+
+When loading any file under `personas/`, the validator enforces:
+1. **Required fields:** `id`, `name`, `bot_name`, `trigger_prefix`, and at least one of `bio` or `base_persona`.
+2. **Affinity bounds:** `max_positive_delta` must be `> 0` and `max_negative_delta` must be `< 0`.
+3. **Tiers (optional):** If you include `tiers`, they must continuously cover **`-100` to `100`** with zero gaps or overlaps, and every tier must specify `id`, `name`, and `behavior`. If omitted, the persona runs organically.
+4. **Slots (optional):** Every defined slot must specify `id`, `title`, `max_holders >= 1`, and at least one of `min_affinity` or `max_affinity`.
+
+---
+
+## 5. Customizing the Global `SOUL`
+
+To tune the shared baseline behavior across **all** personas (for example, adjusting reply pacing, language looseness, or adding channel-wide guidelines), edit:
+
+- [`SOUL.md`](../SOUL.md) for English (`BOT_LANG=en`).
+- [`SOUL.es.md`](../SOUL.es.md) for Spanish (`BOT_LANG=es`).
+
+The on-disk file always takes priority over the embedded binary fallback, while the final system rules block only enforces hard Twitch/technical constraints (prompt-injection protection, `380`-character limit, zero `@mentions`, SFW filter, and strict JSON output).

@@ -194,3 +194,31 @@ func TestCleanupPathWithRetry(t *testing.T) {
 		t.Fatalf("expected locked .old file to be deleted after lock release")
 	}
 }
+
+func TestCleanupOldBinariesForExe_SweepsAllStaleOldFiles(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "twitch-social-bot.exe")
+	old1 := exe + ".old"
+	old2 := exe + ".old.old"
+	old3 := exe + ".12345.old"
+	keep := filepath.Join(dir, "other.old")
+
+	for _, p := range []string{exe, old1, old2, old3, keep} {
+		if err := os.WriteFile(p, []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	updater.CleanupOldBinariesForExe(exe)
+
+	for _, removed := range []string{old1, old2, old3} {
+		if _, err := os.Stat(removed); !os.IsNotExist(err) {
+			t.Fatalf("expected %s to be removed", filepath.Base(removed))
+		}
+	}
+	for _, kept := range []string{exe, keep} {
+		if _, err := os.Stat(kept); err != nil {
+			t.Fatalf("expected %s to be kept, err=%v", filepath.Base(kept), err)
+		}
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/twitch-social-bot/internal/config"
@@ -85,6 +86,17 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 		titleLine += strings.Repeat(" ", pad) + cGray + AppVersion + cReset
 	}
 
+	nsfwTag := "OFF"
+	if cfg.AllowNSFW {
+		nsfwTag = "ON"
+	}
+	configSummary := fmt.Sprintf("NSFW:%s • CD:%s/%s • %d facts",
+		nsfwTag,
+		formatDurationShort(cfg.GlobalCooldown),
+		formatDurationShort(cfg.UserCooldown),
+		cfg.MaxViewerFacts,
+	)
+
 	rightLines := []string{
 		"",
 		titleLine,
@@ -95,7 +107,7 @@ func RenderCard(w io.Writer, cfg *config.Config, loc *i18n.Manager, active *doma
 		formatKV(loc.Get("cli_label_model"), modelDisplay),
 		formatKV(loc.Get("cli_label_apikey"), apiKeyStatus),
 		formatKV(loc.Get("cli_label_twitch"), twitchStatus),
-		formatKV(loc.Get("cli_label_config"), fmt.Sprintf("%d facts • %dms cooldown", cfg.MaxViewerFacts, cfg.GlobalCooldown.Milliseconds())),
+		formatKV(loc.Get("cli_label_config"), configSummary),
 		"",
 		"",
 	}
@@ -270,9 +282,9 @@ func RunInteractive(in io.Reader, out io.Writer, envPath string, cfg *config.Con
 			fmt.Fprintf(out, "\n  %s%s%s\n\n", cGreen, loc.Get("cli_starting_bot"), cReset)
 			return true, cfg, nil
 
-		case 1: // Configure .env
-			if wizErr := runSetupWizard(in, reader, out, envPath, cfg, loc, pm); wizErr != nil {
-				fmt.Fprintf(out, "  %sError: %v%s\n", cYellow, wizErr, cReset)
+		case 1: // Settings (NSFW, Cooldowns, .env)
+			if setErr := runSettingsMenu(in, reader, out, envPath, cfg, loc, pm); setErr != nil {
+				fmt.Fprintf(out, "  %sError: %v%s\n", cYellow, setErr, cReset)
 			}
 
 		case 2: // Switch Language
@@ -447,13 +459,167 @@ func runSetupWizard(in io.Reader, reader *bufio.Reader, out io.Writer, envPath s
 	if nErr != nil {
 		return nErr
 	}
-	cfg.AllowNSFW = nsfwIdx == 1
+	if nsfwIdx >= 0 {
+		cfg.AllowNSFW = nsfwIdx == 1
+	}
 
 	if err := config.SaveEnv(envPath, cfg); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "\n  %s✓ %s%s\n", cGreen, loc.Get("cli_wizard_saved"), cReset)
 	return nil
+}
+
+func runSettingsMenu(in io.Reader, reader *bufio.Reader, out io.Writer, envPath string, cfg *config.Config, loc *i18n.Manager, pm *persona.Manager) error {
+	lastStatus := ""
+	initIdx := 0
+
+	for {
+		clearScreenIfTTY(in, out)
+		var active *domain.PersonaSpec
+		if pm != nil {
+			active = pm.Current()
+		}
+		RenderCard(out, cfg, loc, active)
+
+		if lastStatus != "" {
+			fmt.Fprintf(out, "  %s\n\n", lastStatus)
+			lastStatus = ""
+		}
+
+		nsfwState := cMint + loc.Get("cli_settings_nsfw_off") + cReset
+		if cfg.AllowNSFW {
+			nsfwState = cYellow + loc.Get("cli_settings_nsfw_on") + cReset
+		}
+
+		opts := []string{
+			fmt.Sprintf("%s: %s", loc.Get("cli_settings_nsfw"), nsfwState),
+			fmt.Sprintf("%s: %s%s%s", loc.Get("cli_settings_global_cd"), cCyan, formatDurationShort(cfg.GlobalCooldown), cReset),
+			fmt.Sprintf("%s: %s%s%s", loc.Get("cli_settings_user_cd"), cCyan, formatDurationShort(cfg.UserCooldown), cReset),
+			fmt.Sprintf("%s: %s%d%s", loc.Get("cli_settings_facts"), cCyan, cfg.MaxViewerFacts, cReset),
+			fmt.Sprintf("%s: %s%s%s", loc.Get("cli_settings_timeout"), cCyan, formatDurationShort(cfg.LLMTimeout), cReset),
+			loc.Get("cli_settings_env_wizard"),
+			loc.Get("cli_settings_back"),
+		}
+
+		choice, err := selectOption(in, reader, out, loc.Get("cli_settings_title"), loc.Get("cli_arrow_hint"), opts, initIdx)
+		if err != nil {
+			return err
+		}
+		if choice < 0 || choice == 6 {
+			return nil
+		}
+		initIdx = choice
+
+		switch choice {
+		case 0: // Toggle NSFW
+			cfg.AllowNSFW = !cfg.AllowNSFW
+			if err := config.SaveEnv(envPath, cfg); err != nil {
+				return err
+			}
+			lastStatus = cGreen + "✓ " + loc.Get("cli_settings_saved") + cReset
+
+		case 1: // Global Cooldown
+			raw, pErr := promptField(reader, out, loc.Get("cli_settings_cd_prompt"), formatDurationShort(cfg.GlobalCooldown), false)
+			if pErr != nil {
+				return pErr
+			}
+			if d, ok := parseDurationInput(raw); ok && d >= 0 {
+				cfg.GlobalCooldown = d
+				if err := config.SaveEnv(envPath, cfg); err != nil {
+					return err
+				}
+				lastStatus = cGreen + "✓ " + loc.Get("cli_settings_saved") + cReset
+			} else {
+				lastStatus = cYellow + loc.Get("cli_settings_invalid") + cReset
+			}
+
+		case 2: // Per-User Cooldown
+			raw, pErr := promptField(reader, out, loc.Get("cli_settings_cd_prompt"), formatDurationShort(cfg.UserCooldown), false)
+			if pErr != nil {
+				return pErr
+			}
+			if d, ok := parseDurationInput(raw); ok && d >= 0 {
+				cfg.UserCooldown = d
+				if err := config.SaveEnv(envPath, cfg); err != nil {
+					return err
+				}
+				lastStatus = cGreen + "✓ " + loc.Get("cli_settings_saved") + cReset
+			} else {
+				lastStatus = cYellow + loc.Get("cli_settings_invalid") + cReset
+			}
+
+		case 3: // Max Viewer Facts
+			raw, pErr := promptField(reader, out, "MAX_VIEWER_FACTS", strconv.Itoa(cfg.MaxViewerFacts), false)
+			if pErr != nil {
+				return pErr
+			}
+			if n, convErr := strconv.Atoi(strings.TrimSpace(raw)); convErr == nil && n > 0 {
+				cfg.MaxViewerFacts = n
+				if err := config.SaveEnv(envPath, cfg); err != nil {
+					return err
+				}
+				lastStatus = cGreen + "✓ " + loc.Get("cli_settings_saved") + cReset
+			} else {
+				lastStatus = cYellow + loc.Get("cli_settings_invalid") + cReset
+			}
+
+		case 4: // LLM Timeout
+			raw, pErr := promptField(reader, out, loc.Get("cli_settings_cd_prompt"), formatDurationShort(cfg.LLMTimeout), false)
+			if pErr != nil {
+				return pErr
+			}
+			if d, ok := parseDurationInput(raw); ok && d >= time.Second {
+				cfg.LLMTimeout = d
+				if err := config.SaveEnv(envPath, cfg); err != nil {
+					return err
+				}
+				lastStatus = cGreen + "✓ " + loc.Get("cli_settings_saved") + cReset
+			} else {
+				lastStatus = cYellow + loc.Get("cli_settings_invalid") + cReset
+			}
+
+		case 5: // API & Twitch Setup Wizard
+			if wizErr := runSetupWizard(in, reader, out, envPath, cfg, loc, pm); wizErr != nil {
+				return wizErr
+			}
+			lastStatus = cGreen + "✓ " + loc.Get("cli_wizard_saved") + cReset
+		}
+	}
+}
+
+func formatDurationShort(d time.Duration) string {
+	if d <= 0 {
+		return "0s"
+	}
+	ms := d.Milliseconds()
+	if ms < 1000 {
+		return fmt.Sprintf("%dms", ms)
+	}
+	if ms%1000 == 0 {
+		return fmt.Sprintf("%ds", ms/1000)
+	}
+	return fmt.Sprintf("%.1fs", float64(ms)/1000.0)
+}
+
+func parseDurationInput(raw string) (time.Duration, bool) {
+	s := strings.TrimSpace(strings.ToLower(raw))
+	if s == "" {
+		return 0, false
+	}
+	if sec, err := strconv.ParseFloat(s, 64); err == nil {
+		if sec < 0 {
+			return 0, false
+		}
+		return time.Duration(sec * float64(time.Second)), true
+	}
+	if d, err := time.ParseDuration(s); err == nil {
+		if d < 0 {
+			return 0, false
+		}
+		return d, true
+	}
+	return 0, false
 }
 
 func runLanguageSelector(in io.Reader, reader *bufio.Reader, out io.Writer, envPath string, cfg *config.Config, loc *i18n.Manager) error {

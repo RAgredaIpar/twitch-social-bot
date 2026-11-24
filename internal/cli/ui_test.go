@@ -157,12 +157,14 @@ func TestRunInteractive_SwitchLanguageAndSetupEnv(t *testing.T) {
 
 	// Simulate returning user (skips onboarding):
 	// 3 -> Switch language -> 2 (es)
-	// 2 -> Setup wizard -> 1 (DeepSeek), sk-1234567890, cid-abc, streamer_one, mochi_bot, 20, 1 (NSFW off)
+	// 2 -> Settings -> 6 (Configure API & Twitch .env) -> 1 (DeepSeek), sk-1234567890, cid-abc, streamer_one, mochi_bot, 20, 1 (NSFW off)
+	// q -> Back from Settings to Main Menu
 	// 5 -> Exit
 	input := strings.Join([]string{
 		"3",
 		"2",
 		"2",
+		"6",
 		"1",
 		"sk-1234567890",
 		"cid-abc",
@@ -170,6 +172,7 @@ func TestRunInteractive_SwitchLanguageAndSetupEnv(t *testing.T) {
 		"mochi_bot",
 		"20",
 		"1",
+		"q",
 		"5",
 	}, "\n") + "\n"
 
@@ -218,5 +221,78 @@ func TestPromptMandatoryUpdate_AcceptAndExit(t *testing.T) {
 	ok, err = cli.PromptMandatoryUpdate(strings.NewReader("2\n"), &outExit, cfg, loc, nil, "abc1234", "def5678")
 	if err != nil || ok {
 		t.Fatalf("expected accept=false on exit, got %v (err=%v)", ok, err)
+	}
+}
+
+func TestRunInteractive_SettingsNSFWCooldownsAndQuitWithQ(t *testing.T) {
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, ".env")
+	if err := os.WriteFile(envPath, []byte("BOT_LANGUAGE=es\nLLM_API_KEY=sk-existing\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	loc, err := i18n.NewManager(filepath.Join("..", "..", "locales"), "es")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		BotLanguage:    "es",
+		LocaleDir:      "locales",
+		LLMAPIKey:      "sk-existing",
+		LLMBaseURL:     "https://api.deepseek.com",
+		LLMModel:       "deepseek-chat",
+		LLMTimeout:     8 * time.Second,
+		GlobalCooldown: 3 * time.Second,
+		UserCooldown:   8 * time.Second,
+		RoomBufferSize: 25,
+		MaxViewerFacts: 15,
+		AllowNSFW:      false,
+		HTTPAddr:       "127.0.0.1:8080",
+	}
+
+	// 2 -> Settings
+	// 1 -> Toggle NSFW (false -> true)
+	// 2 -> Global Cooldown -> "1.5" (1500ms)
+	// 3 -> User Cooldown -> "5" (5000ms)
+	// q -> Back from Settings to Main Menu
+	// q -> Exit Main Menu
+	input := strings.Join([]string{
+		"2",
+		"1",
+		"2",
+		"1.5",
+		"3",
+		"5",
+		"q",
+		"q",
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	start, updatedCfg, err := cli.RunInteractive(strings.NewReader(input), &out, envPath, cfg, loc, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if start {
+		t.Fatalf("expected start=false after quitting with q")
+	}
+	if !updatedCfg.AllowNSFW {
+		t.Fatalf("expected AllowNSFW=true after toggle")
+	}
+	if updatedCfg.GlobalCooldown != 1500*time.Millisecond {
+		t.Fatalf("expected GlobalCooldown=1500ms, got %v", updatedCfg.GlobalCooldown)
+	}
+	if updatedCfg.UserCooldown != 5*time.Second {
+		t.Fatalf("expected UserCooldown=5s, got %v", updatedCfg.UserCooldown)
+	}
+
+	envBytes, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envContent := string(envBytes)
+	for _, want := range []string{"ALLOW_NSFW=true", "GLOBAL_COOLDOWN_MS=1500", "USER_COOLDOWN_MS=5000"} {
+		if !strings.Contains(envContent, want) {
+			t.Fatalf("expected %q in saved .env, got:\n%s", want, envContent)
+		}
 	}
 }

@@ -1,171 +1,213 @@
-# Motor Declarativo de Personalidades YAML
+# Guía de Personalidades y `SOUL.md`
 
-[English](personas.md) | Español
+*Read this in [English](personas.md)*
 
-Este documento detalla la arquitectura, el estándar de especificación y el catálogo de personalidades incluidas en **Twitch Social Bot**. Además, funciona como la guía oficial para crear y registrar nuevos arquetipos dentro de la carpeta `personas/` de forma escalable y ordenada.
+Twitch Social Bot utiliza una **arquitectura de identidad en dos capas**, inspirada en estándares abiertos de la comunidad (**OpenClaw `SOUL.md`**, **ElizaOS** y **Character Cards V2/V3**):
 
----
-
-## 1. Visión General del Sistema
-
-El bot desacopla por completo la personalidad del bot de la lógica del código en Go mediante esquemas declarativos en YAML. Cada personalidad define:
-- **Base del System Prompt**: Identidad, tono de voz, estilo, límites y directrices de brevedad.
-- **Límites de Variación de Afinidad (*Deltas*)**: Máximo aumento o disminución de afinidad permitida en un único turno conversacional.
-- **Niveles de Relación (*Tiers*)**: Cinco rangos continuos de afinidad (`-100` a `+100`) que dictan cómo cambia la familiaridad y el trato del bot hacia cada espectador.
-- **Puestos Sociales (*Social Slots*)**: Títulos honoríficos con cupos limitados y reglas de usurpación (*outrank stealing*).
-- **Filtros de Seguridad**: Palabras censuradas antes de emitir cualquier respuesta en el chat.
-
-### Recarga en Caliente en Vivo
-El streamer o sus moderadores pueden cambiar la personalidad en directo mediante el comando:
-```text
-!bot persona <id_personalidad>
-```
-El motor valida el archivo YAML y actualiza la conducta en memoria al instante sin reiniciar el proceso.
+1. **Capa Global ([`SOUL.es.md`](../SOUL.es.md) / [`SOUL.md`](../SOUL.md)):** Define cómo comportarse como una presencia humana real dentro de un chat de Twitch (cero relleno de asistente, respuestas ágiles, postura propia, sin narración `*en asteriscos*` e inmersión total). Es **neutral al arquetipo**: no impone un tipo de humor ni personalidad concreta.
+2. **Ficha de Personalidad (`personas/<id>.yaml`):** Define el 100% del carácter, trasfondo, estilo de escritura, ejemplos reales de diálogo, color/avatar en el dashboard y, opcionalmente, su sistema de afinidad (`tiers`) y puestos competitivos (`slots`).
 
 ---
 
-## 2. Catálogo de Personalidades Incluidas
+## 1. Personalidades Incluidas
 
-### 1. `cohost_amigos` (Co-Host Amigos)
-- **Nombre del Personaje**: Mochi
-- **Archivo**: `personas/cohost_amigos.yaml`
-- **Categoría Ideal**: Just Chatting, Variedad, Streams de Comunidad.
-- **Estilo**: Co-host sarcástica, ingeniosa y carismática. Compañera de streaming que bromea con el chat con humor seco pero mantiene camaradería con los espectadores recurrentes.
-- **Límites de Afinidad**: Positivo: `+5`, Negativo: `-8`.
-- **Niveles (*Tiers*)**:
-  - `rival` (-100 a -25): Cortante, sarcasmo pesado, desdén.
-  - `desconocido` (-24 a 14): Distante, curiosidad escéptica, cortesía básica.
-  - `habitual` (15 a 44): Casual y amigable, reconoce al viewer.
-  - `pana` (45 a 74): Gran confianza, humor compartido, apodos amistosos.
-  - `favorito` (75 a 100): Lealtad total, defiende al espectador en el chat.
-- **Puestos Sociales**:
-  - `favorito_del_bot` (Cupo: 1, Min: 75): *El Favorito de Mochi*
-  - `complice` (Cupo: 2, Min: 45): *Cómplice Oficial*
-  - `enemigo_publico` (Cupo: 1, Max: -35): *Enemigo Público #1*
+El bot incluye 4 personalidades modulares listas para usar en `personas/`:
 
----
-
-### 2. `rpg_facciones` (RPG Facciones)
-- **Nombre del Personaje**: Lyra
-- **Archivo**: `personas/rpg_facciones.yaml`
-- **Categoría Ideal**: MMORPGs, ARPGs, Roguelikes, Juegos de Fantasía.
-- **Estilo**: Guild Master y estratega veterana que ve el chat como una raid en curso. Usa terminología gamer/rolera natural, motiva a su party y frena a los trolls.
-- **Límites de Afinidad**: Positivo: `+5`, Negativo: `-8`.
-- **Niveles (*Tiers*)**:
-  - `trol_cueva` (-100 a -25): Mob hostil, burlas tácticas.
-  - `npc` (-24 a 14): Aventurero genérico en la taberna.
-  - `aprendiz` (15 a 44): Recluta en entrenamiento.
-  - `raider_veterano` (45 a 74): Compañero de raid de confianza.
-  - `leyenda_gremio` (75 a 100): Héroe legendario del gremio.
-- **Puestos Sociales**:
-  - `campeon_gremial` (Cupo: 1, Min: 75): *Campeón del Gremio*
-  - `mariscal_tactico` (Cupo: 1, Min: 45): *Mariscal Táctico*
-  - `proscrito_reino` (Cupo: 1, Max: -35): *Proscrito del Reino*
+### 1.1. Co-Host Amigos (`cohost_amigos`)
+- **Archivo:** [`personas/cohost_amigos.yaml`](../personas/cohost_amigos.yaml)
+- **Nombre del Bot:** **Mochi** · **Tema CLI:** `#34D399`
+- **Perfil:** Co-host sarcástica, aguda y cómplice del streamer y del chat. Alterna con naturalidad entre el vacile filoso y la complicidad real de amiga de stream.
+- **Límites de Afinidad por Turno:** `+5` / `-8`
+- **Niveles (`tiers`):**
+  | Rango | ID | Nombre | Actitud |
+  | :--- | :--- | :--- | :--- |
+  | `-100` a `-25` | `rival` | Rival | Cortante, desconfiada y sarcasmo seco |
+  | `-24` a `14` | `desconocido` | Desconocido | Neutra, distante y escéptica |
+  | `15` a `44` | `habitual` | Habitual | Casual, relajada y amigable |
+  | `45` a `74` | `pana` | Pana | Alta confianza, apodos y humor compartido |
+  | `75` a `100` | `favorito` | Favorito | Máxima lealtad, defiende y celebra al viewer |
+- **Puestos Competitivos (`slots`):**
+  - `favorito_del_bot` (*El Favorito de Mochi*): 1 cupo, afinidad mínima `75`, robable por superación.
+  - `complice` (*Cómplice Oficial*): 2 cupos, afinidad mínima `45`, robable por superación.
+  - `enemigo_publico` (*Enemigo Público #1*): 1 cupo, afinidad máxima `-35`, robable por superación.
 
 ---
 
-### 3. `clan_jerarquia` (Clan Jerarquía)
-- **Nombre del Personaje**: Dante
-- **Archivo**: `personas/clan_jerarquia.yaml`
-- **Categoría Ideal**: FPS Competitivos, Supervivencia, Estrategia.
-- **Estilo**: Jefe respetado e imponente de la familia del canal. Mentalidad de sindicato y honor clásico: lealtad, respeto, palabras medidas y jerarquía estricta.
-- **Límites de Afinidad**: Positivo: `+6`, Negativo: `-12`.
-- **Niveles (*Tiers*)**:
-  - `escoria` (-100 a -35): Desprecio absoluto y burlas cortas.
-  - `recluta` (-34 a 10): Sin demostrar valor, órdenes estrictas.
-  - `guerrero` (11 a 45): Guerrero reconocido en el campo de batalla.
-  - `veterano` (46 a 75): Hermano de clan respetado y consejero.
-  - `senor_de_la_guerra` (76 a 100): Igual en batalla y hermano de sangre.
-- **Puestos Sociales**:
-  - `mano_derecha` (Cupo: 1, Min: 75): *Mano Derecha del Caudillo*
-  - `berserker_elite` (Cupo: 2, Min: 50): *Berserker de Élite*
-  - `traidor_marcado` (Cupo: 1, Max: -45): *Traidor Marcado*
+### 1.2. Clan y Jerarquía (`clan_jerarquia`)
+- **Archivo:** [`personas/clan_jerarquia.yaml`](../personas/clan_jerarquia.yaml)
+- **Nombre del Bot:** **Dante** · **Tema CLI:** `#EF4444`
+- **Perfil:** Jefe respetado e imponente del sindicato que gobierna el canal. Habla con autoridad serena, códigos de honor y sentencias lapidarias.
+- **Límites de Afinidad por Turno:** `+5` / `-8`
+- **Niveles (`tiers`):**
+  | Rango | ID | Nombre | Actitud |
+  | :--- | :--- | :--- | :--- |
+  | `-100` a `-25` | `exiliado` | Exiliado | Traidor o enemigo del clan; desprecio gélido |
+  | `-24` a `14` | `recluta` | Recluta | Severo, formal y vigilante |
+  | `15` a `44` | `socio` | Socio | Miembro probado; trato cordial de negocios |
+  | `45` a `74` | `capitan` | Capitán | Comandante de confianza; habla de igual a igual |
+  | `75` a `100` | `mano_derecha` | Mano Derecha | Confidente supremo; lealtad inquebrantable |
+- **Puestos Competitivos (`slots`):**
+  - `mano_derecha` (*Mano Derecha de la Familia*): 1 cupo, afinidad mínima `75`, robable.
+  - `guardaespaldas` (*Guardaespaldas del Clan*): 2 cupos, afinidad mínima `45`, robable.
+  - `traidor_oficial` (*Traidor Oficial Marcado*): 1 cupo, afinidad máxima `-35`, robable.
 
 ---
 
-### 4. `drama_romance` (Drama & Romance)
-- **Nombre del Personaje**: Celeste
-- **Archivo**: `personas/drama_romance.yaml`
-- **Categoría Ideal**: Juegos de Historia, Novelas Visuales, Streams Tranquilos, ASMR.
-- **Estilo**: Estrella de telenovela melodramática y apasionada. Cada respuesta está cargada de emoción, drama teatral, intensidad romántica o resentimiento profundo.
-- **Límites de Afinidad**: Positivo: `+7`, Negativo: `-9`.
-- **Niveles (*Tiers*)**:
-  - `desamor` (-100 a -20): Despecho dramático, frialdad dolida.
-  - `indiferente` (-19 a 15): Cortesía lejana ocultando orgullo.
-  - `admirador` (16 a 49): Calidez coqueta y sonrisas teatrales.
-  - `amado` (50 a 79): Afecto profundo y lealtad poética.
-  - `alma_gemela` (80 a 100): Devoción eterna y drama romántico absoluto.
-- **Puestos Sociales**:
-  - `amor_prohibido` (Cupo: 1, Min: 80): *Amor Prohibido*
-  - `rival_en_amores` (Cupo: 2, Max: -25): *Rival en Amores*
-  - `confidente_secreto` (Cupo: 1, Min: 50): *Confidente Secreto*
+### 1.3. Drama y Romance (`drama_romance`)
+- **Archivo:** [`personas/drama_romance.yaml`](../personas/drama_romance.yaml)
+- **Nombre del Bot:** **Celeste** · **Tema CLI:** `#F472B6`
+- **Perfil:** Copresentadora apasionada, dramática y estilo *tsundere* de telenovela. Convierte cualquier detalle del chat en intriga romántica, celos teatrales o suspiros.
+- **Límites de Afinidad por Turno:** `+5` / `-8`
+- **Niveles (`tiers`):**
+  | Rango | ID | Nombre | Actitud |
+  | :--- | :--- | :--- | :--- |
+  | `-100` a `-25` | `hater` | Hater | Despecho absoluto y rencor teatral |
+  | `-24` a `14` | `conocido` | Conocido | Distante, altiva y tsundere clásica |
+  | `15` a `44` | `amigo` | Amigo | Amistad cálida con coqueteo inocente |
+  | `45` a `74` | `pretendiente` | Pretendiente | Nerviosismo cómplice, halagos y celos |
+  | `75` a `100` | `pareja_oficial` | Pareja Oficial | Pasión desbordada y celos protectores |
+- **Puestos Competitivos (`slots`):**
+  - `pareja_oficial` (*Pareja Oficial*): 1 cupo, afinidad mínima `75`, robable.
+  - `crush_secreto` (*Crush Secreto*): 2 cupos, afinidad mínima `45`, robable.
+  - `ex_toxico` (*Ex Tóxico*): 1 cupo, afinidad máxima `-35`, robable.
 
 ---
 
-## 3. Guía Paso a Paso para Crear Nuevas Personalidades
+### 1.4. RPG y Facciones (`rpg_facciones`)
+- **Archivo:** [`personas/rpg_facciones.yaml`](../personas/rpg_facciones.yaml)
+- **Nombre del Bot:** **Lyra** · **Tema CLI:** `#38BDF8`
+- **Perfil:** *Guild Master* y estratega veterana que trata el directo como una raid legendaria. Competitiva, táctica y directa con su party.
+- **Límites de Afinidad por Turno:** `+5` / `-8`
+- **Niveles (`tiers`):**
+  | Rango | ID | Nombre | Actitud |
+  | :--- | :--- | :--- | :--- |
+  | `-100` a `-25` | `trol_cueva` | Trol de Cueva | Mob hostil o debuff andante; burlas tácticas |
+  | `-24` a `14` | `npc` | NPC | Aventurero genérico en la taberna |
+  | `15` a `44` | `party_member` | Party Member | Compañero confirmado de escuadrón |
+  | `45` a `74` | `veterano` | Veterano | Complicidad táctica y respeto de veterano |
+  | `75` a `100` | `carry_oficial` | Carry Oficial | MVP de la guild; leyenda indiscutible |
+- **Puestos Competitivos (`slots`):**
+  - `carry_oficial` (*Carry Oficial de la Party*): 1 cupo, afinidad mínima `75`, robable.
+  - `duo_partner` (*Compañero de Dúo*): 2 cupos, afinidad mínima `45`, robable.
+  - `nemesis` (*Némesis del Servidor*): 1 cupo, afinidad máxima `-35`, robable.
 
-Para agregar un arquetipo nuevo **no necesitas tocar nada de código en Go**.
+---
 
-### Plantilla de Ejemplo (`personas/<nueva_personalidad>.yaml`)
+## 2. Cómo Cambiar de Personalidad
+
+Puedes cambiar de personaje en cualquier momento sin perder la memoria del canal (los perfiles se guardan separados por personalidad y existe aislamiento de voz `[CAMBIO DE PERSONAJE]`):
+
+1. **En vivo desde el Dashboard CLI:** Presiona **`P`** mientras el bot está corriendo, elige con `↑ / ↓` y confirma con `Enter` (cambia en caliente y actualiza `DEFAULT_PERSONA` en `.env`).
+2. **Desde el chat de Twitch** (Streamer o Moderador):
+   ```text
+   !bot persona <id>
+   ```
+   Ejemplo: `!bot persona drama_romance`
+3. **Desde el menú principal o `.env`:** Selecciona `Cambiar Personalidad` en la CLI o define `DEFAULT_PERSONA=clan_jerarquia` en tu `.env`.
+
+---
+
+## 3. Importar Character Cards de la Comunidad (V1 / V2 / V3)
+
+Desde el menú `Cambiar Personalidad` → **`↓ Importar Personalidad (.png / .json / .charx)`** puedes arrastrar y soltar tarjetas de sitios como **SillyTavern**, **Chub**, **JanitorAI** o **Character Tavern**:
+
+- **Formatos soportados:** `.png` (con metadata embebida `ccv3` o `chara`), `.json` (Spec V1/V2/V3) y `.charx` (ZIP con `card.json` + retrato).
+- **Conversión automática:** El bot extrae nombre, `bio`, `lore`, `style`, `message_examples`, convierte el retrato en arte **Braille** (`avatar_rows`) para el dashboard CLI y genera el `.yaml` dentro de `personas/`.
+- **Filtro `+18` (NSFW):** Por defecto `ALLOW_NSFW=false` inyecta `[MODO SEGURO +18]` para proteger tu canal en Twitch, incluso si la tarjeta importada tenía temática adulta. Puedes cambiarlo en el asistente o en `.env`.
+- **Anti-narración automática:** Gracias a [`SOUL.es.md`](../SOUL.es.md), las tarjetas diseñadas para roleplay largo se adaptan automáticamente a chat en vivo sin escribir `*acciones entre asteriscos*`.
+
+---
+
+## 4. Cómo Crear tu Propia Personalidad (Esquema Modular)
+
+Puedes usar el asistente **`+ Crear Nueva Personalidad`** desde la CLI o crear manualmente un archivo `personas/<mi_id>.yaml`.
+
+El bot soporta el **esquema modular estilo ElizaOS** (`bio`, `lore`, `adjectives`, `topics`, `style`, `message_examples`) y también mantiene compatibilidad con `base_persona`. Además, **`tiers` y `slots` son 100% opcionales** si quieres una personalidad puramente orgánica.
+
+### Ejemplo Completo (`personas/pirata_espacial.yaml`)
+
 ```yaml
-id: "cyberpunk_hacker"
-name: "Netrunner Renegado"
-bot_name: "Glitch"
+id: "pirata_espacial"
+name: "Pirata Espacial"
+bot_name: "Kael"
+theme_color: "#F59E0B"       # Color de acento en el dashboard CLI (hex)
 trigger_prefix: "!bot"
-max_positive_delta: 6
+max_positive_delta: 5
 max_negative_delta: -8
+max_viewer_facts: 15         # Opcional: tope de hechos recordados por viewer
 
-base_persona: |
-  Eres Glitch, un netrunner cínico y rebelde atrapado en la subred de Twitch.
-  Tu tono es cyberpunk: técnico, sarcástico y siempre alerta ante intrusiones corporativas.
-  Respuestas breves y punzantes (máximo 1 a 2 oraciones).
+bio:
+  - "Capitán contrabandista de una nave destartalada que transmite desde la órbita del canal."
+  - "Astuto, fanfarrón y leal únicamente a quien no delata su ruta ante la federación."
 
-blocked_words:
-  - "palabra_prohibida1"
-  - "palabra_prohibida2"
+lore:
+  - "Le debe combustible a tres estaciones espaciales distintas."
+  - "Cree que el chat es su tripulación y el streamer es el piloto que siempre choca la nave."
 
+adjectives:
+  - "astuto"
+  - "fanfarrón"
+  - "pragmático"
+
+topics:
+  - "saqueos, naves y rutas espaciales"
+  - "apuestas del chat y jugadas arriesgadas"
+
+style:
+  - "Habla ágil y confiado, mezclando jerga espacial con picardía de chat."
+  - "Respuestas cortas y secas; jamás suplica ni explica sus planes dos veces."
+
+message_examples:
+  - user: "hola kael cómo va la nave"
+    reply: "humeando un poco del motor izquierdo, pero todavía corre más que tu rango"
+  - user: "vamos a ganar esta partida?"
+    reply: "si el piloto deja de estrellarse contra cada pared, hay botín asegurado"
+
+blocked_words: []
+
+# OPCIONAL: elimina 'tiers' y 'slots' si quieres un personaje orgánico sin rangos.
 tiers:
-  - id: "virus"
-    name: "Virus del Sistema"
+  - id: "polizon"
+    name: "Polizón"
     min: -100
-    max: -30
-    behavior: "Trato hostil. Amenaza con desconectar su interfaz neural."
-  - id: "anon"
-    name: "Anónimo"
-    min: -29
-    max: 15
-    behavior: "Cautela paranoica. Verifica firmas criptográficas."
-  - id: "operativo"
-    name: "Operativo Callejero"
-    min: 16
-    max: 50
-    behavior: "Trato profesional. Comparte datos y contratos menores."
-  - id: "aliado"
-    name: "Aliado de la Red"
-    min: 51
-    max: 79
-    behavior: "Camaradería cibernética. Advierte sobre trampas y exploits."
-  - id: "leyenda"
-    name: "Leyenda del Ciberespacio"
-    min: 80
+    max: -25
+    behavior: "Desconfiado y amenazante; lo trata como saboteador a punto de salir por la esclusa."
+  - id: "tripulante"
+    name: "Tripulante"
+    min: -24
+    max: 44
+    behavior: "Trato casual de cubierta; comparte bromas y evalúa si sirve para la tripulación."
+  - id: "primer_oficial"
+    name: "Primer Oficial"
+    min: 45
     max: 100
-    behavior: "Respeto total. Acceso a las llaves maestras de la red."
+    behavior: "Confianza total; lo respalda en el chat y le reserva la mejor parte del botín."
 
 slots:
-  - id: "top_netrunner"
-    title: "Primer Ciberdeck del Canal"
+  - id: "primer_oficial"
+    title: "Primer Oficial de la Nave"
     max_holders: 1
-    min_affinity: 80
-    allow_outrank_steal: true
-  - id: "infiltrado_corpo"
-    title: "Rata Corporativa"
-    max_holders: 1
-    max_affinity: -40
+    min_affinity: 60
     allow_outrank_steal: true
 ```
 
-### Reglas de Validación que el Cargador Exige:
-1. **Continuidad de Tiers**: Los niveles deben cubrir todo el rango de `-100` a `+100` de forma estricta, sin huecos ni solapamientos.
-2. **Restricción de Deltas**: `max_positive_delta` debe ser positivo (> 0) y `max_negative_delta` debe ser negativo (< 0).
-3. **Umbrales de Puestos Sociales**: Todo puesto debe indicar `min_affinity` (puesto para aliados) o `max_affinity` (puesto para rivales/enemigos).
-4. **Regla de Brevedad**: Especifica siempre en `base_persona` que responda en pocas oraciones para no inundar el chat de Twitch.
+> **Avatar personalizado (opcional):** Si creas la personalidad desde la CLI o importas una tarjeta, se guarda el campo `avatar_rows` (12 filas en Braille) para mostrar su rostro en el dashboard en vivo.
+
+### Reglas de Validación del Cargador
+
+Al cargar cualquier archivo de `personas/`, el bot valida:
+1. **Campos obligatorios:** `id`, `name`, `bot_name`, `trigger_prefix`, y al menos uno de `bio` o `base_persona`.
+2. **Límites de afinidad:** `max_positive_delta` debe ser `> 0` y `max_negative_delta` debe ser `< 0`.
+3. **Niveles (`tiers`) — opcionales:** Si decides incluir `tiers`, deben cubrir continuamente todo el rango **`-100` a `100`** sin huecos ni solapamientos, y cada tier necesita `id`, `name` y `behavior`. Si los omites, la personalidad funciona en modo orgánico.
+4. **Puestos (`slots`) — opcionales:** Cada slot definido requiere `id`, `title`, `max_holders >= 1` y al menos una condición (`min_affinity` o `max_affinity`).
+
+---
+
+## 5. Personalizar el `SOUL` Global
+
+Si quieres ajustar el comportamiento base de **todas** las personalidades a la vez (por ejemplo, permitir respuestas más largas, cambiar el nivel de lenguaje coloquial o añadir reglas de tu comunidad), edita directamente:
+
+- [`SOUL.es.md`](../SOUL.es.md) cuando el idioma activo es español (`BOT_LANG=es`).
+- [`SOUL.md`](../SOUL.md) cuando el idioma activo es inglés (`BOT_LANG=en`).
+
+El archivo en disco tiene prioridad inmediata sobre el fallback embebido en el binario, y las reglas finales del sistema solo conservan los límites técnicos de Twitch (anti-inyección, `380` caracteres, cero `@menciones`, modo `+18` y formato JSON).

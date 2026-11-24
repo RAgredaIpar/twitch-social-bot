@@ -39,10 +39,14 @@ func IsInteractiveTTY() bool {
 func ReadNavKey(in io.Reader, reader *bufio.Reader) (KeyEvent, string, error) {
 	if in != os.Stdin || !IsInteractiveTTY() {
 		raw, err := reader.ReadString('\n')
-		if err != nil && len(strings.TrimSpace(raw)) == 0 {
+		trimmed := strings.TrimSpace(raw)
+		if err != nil && len(trimmed) == 0 {
 			return KeyOther, "", err
 		}
-		return KeyOther, strings.TrimSpace(raw), nil
+		if strings.EqualFold(trimmed, "q") || strings.EqualFold(trimmed, "esc") {
+			return KeyEsc, "", nil
+		}
+		return KeyOther, trimmed, nil
 	}
 
 	_ = exec.Command("stty", "-F", "/dev/tty", "cbreak", "min", "1", "-echo").Run()
@@ -65,6 +69,8 @@ func ReadNavKey(in io.Reader, reader *bufio.Reader) (KeyEvent, string, error) {
 			return KeyUp, "", nil
 		case 'j', 'J':
 			return KeyDown, "", nil
+		case 'q', 'Q', 3:
+			return KeyEsc, "", nil
 		default:
 			return KeyOther, string(buf[0]), nil
 		}

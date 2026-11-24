@@ -102,3 +102,39 @@ func TestManager_SoulDiskAndFallback(t *testing.T) {
 		t.Fatalf("expected disk SOUL.md override, got %q", got)
 	}
 }
+
+func TestManager_SoulFallbackMatchesDiskTemplates(t *testing.T) {
+	// Ensure repo SOUL.md / SOUL.es.md stay 100% in sync with built-in fallbacks.
+	emptyRoot := t.TempDir()
+	locDir := filepath.Join(emptyRoot, "locales")
+	if err := os.MkdirAll(locDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	m, err := i18n.NewManager(locDir, "en")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	normalize := func(s string) string {
+		return strings.TrimSpace(strings.ReplaceAll(s, "\r\n", "\n"))
+	}
+
+	enBytes, err := os.ReadFile(filepath.Join("..", "..", "SOUL.md"))
+	if err != nil {
+		t.Fatalf("read repo SOUL.md: %v", err)
+	}
+	if normalize(m.Soul()) != normalize(string(enBytes)) {
+		t.Fatalf("built-in English Soul fallback drifted from SOUL.md")
+	}
+
+	if err := m.Set("es"); err != nil {
+		t.Fatal(err)
+	}
+	esBytes, err := os.ReadFile(filepath.Join("..", "..", "SOUL.es.md"))
+	if err != nil {
+		t.Fatalf("read repo SOUL.es.md: %v", err)
+	}
+	if normalize(m.Soul()) != normalize(string(esBytes)) {
+		t.Fatalf("built-in Spanish Soul fallback drifted from SOUL.es.md")
+	}
+}
