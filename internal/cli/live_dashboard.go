@@ -19,31 +19,36 @@ const liveBoxInner = 74
 
 // LiveDashboardConfig configures the interactive live stream dashboard.
 type LiveDashboardConfig struct {
-	Out           io.Writer
-	Version       string
-	Broadcaster   string
-	BotLogin      string
-	HasTwitch     bool
-	Persona       domain.PersonaProvider
-	Orchestrator  *engine.Orchestrator
-	Logs          *LogBuffer
-	Locale        *i18n.Manager
-	Events        <-chan engine.ActivityEvent
-	EventSubReady *atomic.Bool
-	FrameInterval time.Duration
-	StartTime     time.Time
+	Out             io.Writer
+	Version         string
+	Broadcaster     string
+	BotLogin        string
+	HasTwitch       bool
+	Persona         domain.PersonaProvider
+	Orchestrator    *engine.Orchestrator
+	Logs            *LogBuffer
+	Locale          *i18n.Manager
+	Events          <-chan engine.ActivityEvent
+	EventSubReady   *atomic.Bool
+	OnPersonaSwitch func(*domain.PersonaSpec)
+	FrameInterval   time.Duration
+	StartTime       time.Time
 }
 
 // LiveDashboard renders the animated live bot panel (Speaking Ring + Braille EQ +
-// latest interaction) and toggles cleanly to a live Logs debug view via key 'L'.
+// latest interaction), a live Logs view ('L'), and a live Persona picker ('P').
 type LiveDashboard struct {
-	cfg       LiveDashboardConfig
-	showLogs  bool
-	tick      int
-	state     string // "idle" | "thinking" | "speaking"
-	holdTicks int
-	lastUser  string
-	lastReply string
+	cfg        LiveDashboardConfig
+	showLogs   bool
+	showPicker bool
+	pickerIDs  []string
+	pickerIdx  int
+	pickerErr  string
+	tick       int
+	state      string // "idle" | "thinking" | "speaking"
+	holdTicks  int
+	lastUser   string
+	lastReply  string
 }
 
 // NewLiveDashboard initializes a LiveDashboard instance.
@@ -65,12 +70,75 @@ func NewLiveDashboard(cfg LiveDashboardConfig) *LiveDashboard {
 
 // ToggleLogs switches between the animated view and the live logs view.
 func (d *LiveDashboard) ToggleLogs() {
+	d.showPicker = false
 	d.showLogs = !d.showLogs
 }
 
 // ShowingLogs reports whether the live logs view is currently active.
 func (d *LiveDashboard) ShowingLogs() bool {
 	return d.showLogs
+}
+
+// TogglePersonaPicker opens or closes the interactive persona selector overlay.
+func (d *LiveDashboard) TogglePersonaPicker() {
+	if d.showPicker {
+		d.showPicker = false
+		d.pickerErr = ""
+		return
+	}
+	if d.cfg.Persona == nil {
+		return
+	}
+	ids := d.cfg.Persona.List()
+	if len(ids) == 0 {
+		return
+	}
+	d.pickerIDs = ids
+	d.pickerIdx = 0
+	d.pickerErr = ""
+	if cur := d.cfg.Persona.Current(); cur != nil {
+		for i, id := range ids {
+			if id == cur.ID {
+				d.pickerIdx = i
+				break
+			}
+		}
+	}
+	d.showLogs = false
+	d.showPicker = true
+}
+
+// ShowingPersonaPicker reports whether the live persona selector is active.
+func (d *LiveDashboard) ShowingPersonaPicker() bool {
+	return d.showPicker
+}
+
+// MovePersonaCursor moves the persona picker selection up or down with wrap-around.
+func (d *LiveDashboard) MovePersonaCursor(delta int) {
+	if !d.showPicker || len(d.pickerIDs) == 0 {
+		return
+	}
+	n := len(d.pickerIDs)
+	d.pickerIdx = ((d.pickerIdx+delta)%n + n) % n
+}
+
+// ConfirmPersonaSelection activates the highlighted persona and closes the picker.
+func (d *LiveDashboard) ConfirmPersonaSelection() error {
+	if !d.showPicker || d.cfg.Persona == nil || len(d.pickerIDs) == 0 {
+		return nil
+	}
+	targetID := d.pickerIDs[d.pickerIdx]
+	spec, err := d.cfg.Persona.Switch(targetID)
+	if err != nil {
+		d.pickerErr = err.Error()
+		return err
+	}
+	d.showPicker = false
+	d.pickerErr = ""
+	if d.cfg.OnPersonaSwitch != nil {
+		d.cfg.OnPersonaSwitch(spec)
+	}
+	return nil
 }
 
 // ApplyEvent updates the dashboard visual state from an orchestrator activity event.
@@ -134,6 +202,34 @@ func (d *LiveDashboard) Run(ctx context.Context, onBackToMenu, onQuit func()) {
 			case LiveKeyToggleLogs:
 				d.ToggleLogs()
 				d.drawFrame()
+			case LiveKeyTogglePersona:
+				d.TogglePersonaPicker()
+				d.drawFrame()
+			case LiveKeyUp:
+				if d.showPicker {
+					d.MovePersonaCursor(-1)
+					d.drawFrame()
+				}
+			case LiveKeyDown:
+				if d.showPicker {
+					d.MovePersonaCursor(1)
+					d.drawFrame()
+				}
+			case LiveKeyEnter:
+				if d.showPicker {
+					_ = d.ConfirmPersonaSelection()
+					d.drawFrame()
+				}
+			case LiveKeyEsc:
+				if d.showPicker {
+					d.TogglePersonaPicker()
+					d.drawFrame()
+					continue
+				}
+				if onBackToMenu != nil {
+					onBackToMenu()
+				}
+				return
 			case LiveKeyBackToMenu:
 				if onBackToMenu != nil {
 					onBackToMenu()
@@ -207,37 +303,49 @@ func (d *LiveDashboard) RenderFrame(now time.Time) string {
 	}
 
 	var frame string
-	if d.showLogs {
+	switch {
+	case d.showPicker:
+		frame = d.renderPersonaPickerFrame(spec, isEN)
+	case d.showLogs:
 		frame = d.renderLogsFrame(isEN)
-	} else {
+	default:
 		frame = d.renderLiveFrame(now, spec, accent, personaName, personaRole, isEN)
 	}
 
-	viewName := "LIVE (" + personaName + ")"
-	toggleHint := "Modo LOGS"
-	menuHint := "Menu"
-	quitHint := "Salir"
-	viewLabel := "Vista"
-	if d.showLogs {
-		viewName = "LOGS"
-		toggleHint = "Animacion"
+	var footer string
+	if d.showPicker {
+		viewLabel, selHint, actHint, cancelHint := "Vista", "Elegir", "Activar", "Cancelar"
 		if isEN {
+			viewLabel, selHint, actHint, cancelHint = "View", "Select", "Activate", "Cancel"
+		}
+		footer = fmt.Sprintf("\n  %s%s:%s %sPERSONA%s  %s[Arriba/Abajo]%s %s  %s[Enter]%s %s  %s[Esc/P]%s %s\n",
+			cDim, viewLabel, cReset, cBold+cWhite, cReset,
+			cCyan, cReset, selHint,
+			cMint, cReset, actHint,
+			cGray, cReset, cancelHint,
+		)
+	} else {
+		viewName := "LIVE (" + personaName + ")"
+		toggleHint := "Logs"
+		menuHint := "Menu"
+		quitHint := "Salir"
+		viewLabel := "Vista"
+		if d.showLogs {
+			viewName = "LOGS"
 			toggleHint = "Live"
 		}
-	} else if isEN {
-		toggleHint = "Logs"
+		if isEN {
+			viewLabel = "View"
+			quitHint = "Quit"
+		}
+		footer = fmt.Sprintf("\n  %s%s:%s %s%s%s  %s[P]%s Persona  %s[L]%s %s  %s[Q/Esc]%s %s  %s[Ctrl+C]%s %s\n",
+			cDim, viewLabel, cReset, cBold+cWhite, viewName, cReset,
+			cPurple, cReset,
+			cYellow, cReset, toggleHint,
+			cCyan, cReset, menuHint,
+			cGray, cReset, quitHint,
+		)
 	}
-	if isEN {
-		viewLabel = "View"
-		quitHint = "Quit"
-	}
-
-	footer := fmt.Sprintf("\n  %s%s:%s %s%s%s  %s[L]%s %s  %s[Q/Esc]%s %s  %s[Ctrl+C]%s %s\n",
-		cDim, viewLabel, cReset, cBold+cWhite, viewName, cReset,
-		cYellow, cReset, toggleHint,
-		cCyan, cReset, menuHint,
-		cGray, cReset, quitHint,
-	)
 	return frame + footer
 }
 
@@ -399,6 +507,67 @@ func (d *LiveDashboard) renderLogsFrame(isEN bool) string {
 		}
 	}
 	b.WriteString(liveBoxBot(cYellow))
+	return b.String()
+}
+
+func (d *LiveDashboard) renderPersonaPickerFrame(current *domain.PersonaSpec, isEN bool) string {
+	var b strings.Builder
+	title := "[PERSONA] CAMBIAR PERSONALIDAD EN VIVO"
+	activeTag := "[ACTIVA]"
+	subHint := "Cambia la voz y el avatar al instante sin desconectar el bot:"
+	if isEN {
+		title = "[PERSONA] LIVE PERSONA SWITCHER"
+		activeTag = "[ACTIVE]"
+		subHint = "Switch voice and avatar instantly without disconnecting:"
+	}
+
+	b.WriteString(liveBoxTopTitle(cPurple, title))
+	b.WriteString(liveBoxRow(cPurple, cDim+subHint+cReset))
+	b.WriteString(liveBoxRow(cPurple, ""))
+
+	const maxVisible = 11
+	total := len(d.pickerIDs)
+	start := 0
+	if total > maxVisible && d.pickerIdx >= maxVisible {
+		start = d.pickerIdx - maxVisible + 1
+	}
+	end := start + maxVisible
+	if end > total {
+		end = total
+	}
+
+	curID := ""
+	if current != nil {
+		curID = current.ID
+	}
+
+	for i := start; i < end; i++ {
+		id := d.pickerIDs[i]
+		pCol := ThemeColorANSI(&domain.PersonaSpec{ID: id})
+		if pCol == "" {
+			pCol = cMint
+		}
+		mark := ""
+		if id == curID {
+			mark = " " + cDim + activeTag + cReset
+		}
+		if i == d.pickerIdx {
+			b.WriteString(liveBoxRow(cPurple, fmt.Sprintf("  %s> %s%s%s", cBold+pCol, id, cReset, mark)))
+		} else {
+			b.WriteString(liveBoxRow(cPurple, fmt.Sprintf("    %s%s%s%s", cGray, id, cReset, mark)))
+		}
+	}
+
+	for rows := end - start; rows < maxVisible; rows++ {
+		b.WriteString(liveBoxRow(cPurple, ""))
+	}
+
+	if d.pickerErr != "" {
+		b.WriteString(liveBoxRow(cPurple, "\x1b[38;2;248;113;113mError: "+d.pickerErr+cReset))
+	} else {
+		b.WriteString(liveBoxRow(cPurple, ""))
+	}
+	b.WriteString(liveBoxBot(cPurple))
 	return b.String()
 }
 

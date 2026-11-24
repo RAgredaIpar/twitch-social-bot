@@ -14,12 +14,21 @@ import (
 )
 
 type staticPersonaProvider struct {
-	spec *domain.PersonaSpec
+	currentID string
+	specs     map[string]*domain.PersonaSpec
 }
 
-func (p *staticPersonaProvider) Current() *domain.PersonaSpec          { return p.spec }
-func (p *staticPersonaProvider) Switch(string) (*domain.PersonaSpec, error) { return p.spec, nil }
-func (p *staticPersonaProvider) List() []string                      { return []string{p.spec.ID} }
+func (p *staticPersonaProvider) Current() *domain.PersonaSpec { return p.specs[p.currentID] }
+func (p *staticPersonaProvider) Switch(id string) (*domain.PersonaSpec, error) {
+	if s, ok := p.specs[id]; ok {
+		p.currentID = id
+		return s, nil
+	}
+	return nil, fmt.Errorf("persona %q not found", id)
+}
+func (p *staticPersonaProvider) List() []string {
+	return []string{"clan_jerarquia", "cohost_amigos", "drama_romance"}
+}
 
 func stripANSI(s string) string {
 	var b strings.Builder
@@ -71,16 +80,34 @@ func TestLiveDashboard_StatesLogsToggleAndBoxAlignment(t *testing.T) {
 		BotName:    "Mochi",
 		ThemeColor: "#34D399",
 	}
+	celeste := &domain.PersonaSpec{
+		ID:         "drama_romance",
+		Name:       "Drama y Romance",
+		BotName:    "Celeste",
+		ThemeColor: "#F472B6",
+	}
+	prov := &staticPersonaProvider{
+		currentID: "cohost_amigos",
+		specs: map[string]*domain.PersonaSpec{
+			"cohost_amigos":  mochi,
+			"drama_romance":  celeste,
+			"clan_jerarquia": {ID: "clan_jerarquia", Name: "Clan y Jerarquía", BotName: "Dante", ThemeColor: "#EF4444"},
+		},
+	}
 
+	var switchedTo string
 	dash := cli.NewLiveDashboard(cli.LiveDashboardConfig{
 		Version:       "v2.3.0",
 		Broadcaster:   "rhfjfgzrdg",
 		HasTwitch:     true,
-		Persona:       &staticPersonaProvider{spec: mochi},
+		Persona:       prov,
 		Logs:          lb,
 		Locale:        loc,
 		EventSubReady: &ready,
-		StartTime:     time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC),
+		OnPersonaSwitch: func(spec *domain.PersonaSpec) {
+			switchedTo = spec.BotName
+		},
+		StartTime: time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC),
 	})
 
 	now := time.Date(2026, 11, 24, 12, 0, 15, 0, time.UTC)
@@ -137,5 +164,38 @@ func TestLiveDashboard_StatesLogsToggleAndBoxAlignment(t *testing.T) {
 				t.Fatalf("expected aligned logs box width 78, got %d on line %q", w, line)
 			}
 		}
+	}
+
+	// 5. Open Persona picker ('P'), navigate down from cohost_amigos -> drama_romance, confirm with Enter.
+	dash.TogglePersonaPicker()
+	if !dash.ShowingPersonaPicker() {
+		t.Fatal("expected persona picker active after TogglePersonaPicker")
+	}
+	pickerFrame := stripANSI(dash.RenderFrame(now))
+	if !strings.Contains(pickerFrame, "[PERSONA] CAMBIAR PERSONALIDAD EN VIVO") || !strings.Contains(pickerFrame, "> cohost_amigos") {
+		t.Fatalf("expected persona picker highlighting cohost_amigos, got:\n%s", pickerFrame)
+	}
+	for _, line := range strings.Split(pickerFrame, "\n") {
+		if strings.HasPrefix(line, "  │") || strings.HasPrefix(line, "  ╭") || strings.HasPrefix(line, "  ╰") {
+			w := len([]rune(line))
+			if w != 78 {
+				t.Fatalf("expected aligned picker box width 78, got %d on line %q", w, line)
+			}
+		}
+	}
+
+	dash.MovePersonaCursor(1)
+	if err := dash.ConfirmPersonaSelection(); err != nil {
+		t.Fatalf("unexpected switch error: %v", err)
+	}
+	if dash.ShowingPersonaPicker() {
+		t.Fatal("expected persona picker closed after ConfirmPersonaSelection")
+	}
+	if switchedTo != "Celeste" || prov.Current().ID != "drama_romance" {
+		t.Fatalf("expected switched to Celeste (drama_romance), got %q (%+v)", switchedTo, prov.Current())
+	}
+	afterSwitchFrame := stripANSI(dash.RenderFrame(now))
+	if !strings.Contains(afterSwitchFrame, "Celeste") {
+		t.Fatalf("expected live dashboard to show Celeste after switch, got:\n%s", afterSwitchFrame)
 	}
 }

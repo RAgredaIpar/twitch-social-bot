@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -105,7 +106,7 @@ func main() {
 				return
 			}
 			cfg = updatedCfg
-			if !runBotSession(ctx, stop, cfg, loc, pm, true) {
+			if !runBotSession(ctx, stop, *envFile, cfg, loc, pm, true) {
 				return
 			}
 		}
@@ -113,10 +114,10 @@ func main() {
 		log.Fatalf("LLM_API_KEY is required in headless mode (run without --run for interactive setup)")
 	}
 
-	runBotSession(ctx, stop, cfg, loc, pm, false)
+	runBotSession(ctx, stop, *envFile, cfg, loc, pm, false)
 }
 
-func runBotSession(parentCtx context.Context, stopApp context.CancelFunc, cfg *config.Config, loc *i18n.Manager, pm *persona.Manager, interactiveLive bool) bool {
+func runBotSession(parentCtx context.Context, stopApp context.CancelFunc, envPath string, cfg *config.Config, loc *i18n.Manager, pm *persona.Manager, interactiveLive bool) bool {
 	ctx, cancelSession := context.WithCancel(parentCtx)
 	defer cancelSession()
 
@@ -315,6 +316,14 @@ func runBotSession(parentCtx context.Context, stopApp context.CancelFunc, cfg *c
 			Locale:        loc,
 			Events:        activityCh,
 			EventSubReady: &eventSubReady,
+			OnPersonaSwitch: func(spec *domain.PersonaSpec) {
+				if spec == nil {
+					return
+				}
+				log.Printf("Personalidad cambiada en vivo: %s [%s]", spec.Name, spec.BotName)
+				cfg.PersonaFile = filepath.Join(cfg.PersonaDir, spec.ID+".yaml")
+				_ = config.SaveEnv(envPath, cfg)
+			},
 		})
 		dash.Run(ctx,
 			func() {

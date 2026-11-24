@@ -130,14 +130,19 @@ type LiveKey int
 const (
 	LiveKeyNone LiveKey = iota
 	LiveKeyToggleLogs
+	LiveKeyTogglePersona
+	LiveKeyUp
+	LiveKeyDown
+	LiveKeyEnter
+	LiveKeyEsc
 	LiveKeyBackToMenu
 	LiveKeyQuit
 )
 
-// StartLiveKeyReader polls the Windows Console non-blockingly for L (toggle logs),
-// Q/Esc (return to main menu), and Ctrl+C (exit application) until ctx is canceled.
+// StartLiveKeyReader polls the Windows Console non-blockingly for live dashboard shortcuts
+// (L logs, P persona selector, Up/Down/Enter/Esc navigation, Q menu, Ctrl+C quit).
 func StartLiveKeyReader(ctx context.Context) <-chan LiveKey {
-	ch := make(chan LiveKey, 8)
+	ch := make(chan LiveKey, 16)
 	if !IsInteractiveTTY() {
 		close(ch)
 		return ch
@@ -182,10 +187,20 @@ func StartLiveKeyReader(ctx context.Context) <-chan LiveKey {
 					switch {
 					case ru == 3:
 						lk = LiveKeyQuit
-					case ke.VirtualKeyCode == 0x1B || ru == 'q' || ru == 'Q':
+					case ke.VirtualKeyCode == 0x26 || ru == 'k' || ru == 'K':
+						lk = LiveKeyUp
+					case ke.VirtualKeyCode == 0x28 || ru == 'j' || ru == 'J':
+						lk = LiveKeyDown
+					case ke.VirtualKeyCode == 0x0D:
+						lk = LiveKeyEnter
+					case ke.VirtualKeyCode == 0x1B:
+						lk = LiveKeyEsc
+					case ru == 'q' || ru == 'Q':
 						lk = LiveKeyBackToMenu
 					case ru == 'l' || ru == 'L':
 						lk = LiveKeyToggleLogs
+					case ru == 'p' || ru == 'P':
+						lk = LiveKeyTogglePersona
 					}
 					if lk != LiveKeyNone {
 						select {

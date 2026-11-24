@@ -86,14 +86,19 @@ type LiveKey int
 const (
 	LiveKeyNone LiveKey = iota
 	LiveKeyToggleLogs
+	LiveKeyTogglePersona
+	LiveKeyUp
+	LiveKeyDown
+	LiveKeyEnter
+	LiveKeyEsc
 	LiveKeyBackToMenu
 	LiveKeyQuit
 )
 
-// StartLiveKeyReader reads single-key commands (L to toggle logs, Q/Esc to return
-// to the start menu, Ctrl+C to quit) from a POSIX TTY until ctx is canceled.
+// StartLiveKeyReader reads single-key commands (L logs, P persona selector,
+// Up/Down/Enter/Esc navigation, Q menu, Ctrl+C quit) from a POSIX TTY until ctx is canceled.
 func StartLiveKeyReader(ctx context.Context) <-chan LiveKey {
-	ch := make(chan LiveKey, 8)
+	ch := make(chan LiveKey, 16)
 	if !IsInteractiveTTY() {
 		close(ch)
 		return ch
@@ -119,20 +124,39 @@ func StartLiveKeyReader(ctx context.Context) <-chan LiveKey {
 			}
 		}()
 
-		buf := make([]byte, 1)
+		buf := make([]byte, 3)
 		for {
 			n, rErr := tty.Read(buf)
 			if rErr != nil || n == 0 {
 				return
 			}
 			var lk LiveKey
-			switch buf[0] {
-			case 'l', 'L':
-				lk = LiveKeyToggleLogs
-			case 'q', 'Q', 0x1b:
-				lk = LiveKeyBackToMenu
-			case 3:
-				lk = LiveKeyQuit
+			if n == 3 && buf[0] == 0x1b && buf[1] == '[' {
+				switch buf[2] {
+				case 'A':
+					lk = LiveKeyUp
+				case 'B':
+					lk = LiveKeyDown
+				}
+			} else {
+				switch buf[0] {
+				case 'l', 'L':
+					lk = LiveKeyToggleLogs
+				case 'p', 'P':
+					lk = LiveKeyTogglePersona
+				case 'k', 'K':
+					lk = LiveKeyUp
+				case 'j', 'J':
+					lk = LiveKeyDown
+				case '\r', '\n':
+					lk = LiveKeyEnter
+				case 0x1b:
+					lk = LiveKeyEsc
+				case 'q', 'Q':
+					lk = LiveKeyBackToMenu
+				case 3:
+					lk = LiveKeyQuit
+				}
 			}
 			if lk != LiveKeyNone {
 				select {
