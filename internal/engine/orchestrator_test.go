@@ -754,4 +754,56 @@ func TestHandleMessage_SameAccountBroadcasterMode(t *testing.T) {
 	if !strings.Contains(strings.ToLower(sender.replies[1].Text), "luna") {
 		t.Errorf("expected status reply to mention persona, got %q", sender.replies[1].Text)
 	}
+
+	// 5. Twitch threaded echo of "!bot status" prepends "@Rhfjfgzrdg " — must NOT call LLM!
+	fakeClock.Advance(20 * time.Second)
+	statusEcho := "@Rhfjfgzrdg " + sender.replies[1].Text
+	if err := orch.HandleMessage(ctx, domain.ChatMessage{
+		MessageID:     "msg_status_echo",
+		BroadcasterID: "677226599",
+		UserID:        "677226599",
+		Username:      "rhfjfgzrdg",
+		DisplayName:   "Rhfjfgzrdg",
+		IsBroadcaster: true,
+		Text:          statusEcho,
+	}); err != nil {
+		t.Fatalf("unexpected error on status echo: %v", err)
+	}
+	if llmCli.callCount != 1 {
+		t.Fatalf("expected status reply echo with @Broadcaster prefix to be ignored, got %d LLM calls", llmCli.callCount)
+	}
+
+	// 6. Another viewer mentioning "@Rhfjfgzrdg buena partida crack" in same-account mode talks to the streamer, NOT the bot.
+	if err := orch.HandleMessage(ctx, domain.ChatMessage{
+		MessageID:       "msg_viewer_to_streamer",
+		BroadcasterID:   "677226599",
+		BroadcasterName: "Rhfjfgzrdg",
+		UserID:          "viewer_777",
+		Username:        "pepito",
+		DisplayName:     "Pepito",
+		IsBroadcaster:   false,
+		Text:            "@Rhfjfgzrdg buena partida crack",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if llmCli.callCount != 1 {
+		t.Fatalf("expected viewer @Streamer mention in same-account mode NOT to trigger bot, got %d LLM calls", llmCli.callCount)
+	}
+
+	// 7. Viewer mentioning "@LunaBot" (persona BotName) in same-account mode DOES trigger the bot.
+	if err := orch.HandleMessage(ctx, domain.ChatMessage{
+		MessageID:       "msg_viewer_to_botname",
+		BroadcasterID:   "677226599",
+		BroadcasterName: "Rhfjfgzrdg",
+		UserID:          "viewer_777",
+		Username:        "pepito",
+		DisplayName:     "Pepito",
+		IsBroadcaster:   false,
+		Text:            "@LunaBot qué opinas de esa jugada",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if llmCli.callCount != 2 {
+		t.Fatalf("expected viewer @BotName mention to trigger bot, got %d LLM calls", llmCli.callCount)
+	}
 }

@@ -63,6 +63,7 @@ type Orchestrator struct {
 	cachedChannelAt   time.Time
 	sentMu            sync.Mutex
 	sentReplies       map[string]time.Time
+	sentMessageIDs    map[string]time.Time
 }
 
 // NewOrchestrator creates a new conversational orchestrator.
@@ -75,10 +76,11 @@ func NewOrchestrator(cfg OrchestratorConfig) *Orchestrator {
 		loc, _ = i18n.NewManager("", "es")
 	}
 	return &Orchestrator{
-		cfg:         cfg,
-		loc:         loc,
-		mood:        social.NewMoodTracker(cfg.Clock),
-		sentReplies: make(map[string]time.Time),
+		cfg:            cfg,
+		loc:            loc,
+		mood:           social.NewMoodTracker(cfg.Clock),
+		sentReplies:    make(map[string]time.Time),
+		sentMessageIDs: make(map[string]time.Time),
 	}
 }
 
@@ -143,22 +145,30 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 	if trimmedText == "" {
 		return nil
 	}
+	if o.wasSentMessageID(msg.MessageID) {
+		return nil
+	}
 
 	var spec *domain.PersonaSpec
 	if o.cfg.Persona != nil {
 		spec = o.cfg.Persona.Current()
 	}
 
-	payload, triggered := matchTrigger(msg.Text, spec, o.cfg.BotLogin)
+	isSelf := (o.cfg.BotUserID != "" && msg.UserID == o.cfg.BotUserID) ||
+		(o.cfg.BotLogin != "" && strings.EqualFold(msg.Username, o.cfg.BotLogin))
+	sameAccountMode := (o.cfg.BotUserID != "" && msg.BroadcasterID != "" && o.cfg.BotUserID == msg.BroadcasterID) ||
+		(o.cfg.BotLogin != "" && msg.BroadcasterName != "" && strings.EqualFold(o.cfg.BotLogin, msg.BroadcasterName))
+	if isSelf && msg.IsBroadcaster {
+		sameAccountMode = true
+	}
+
+	payload, triggered := matchTrigger(msg.Text, spec, o.cfg.BotLogin, sameAccountMode)
 
 	// Filter self messages: in dedicated-bot mode, drop everything from the bot account.
 	// In same-account mode (broadcaster == bot), allow triggered commands/prompts from the
 	// streamer while dropping untriggered echoes and recently sent bot replies.
-	isSelf := (o.cfg.BotUserID != "" && msg.UserID == o.cfg.BotUserID) ||
-		(o.cfg.BotLogin != "" && strings.EqualFold(msg.Username, o.cfg.BotLogin))
 	if isSelf {
-		sameAccount := msg.IsBroadcaster || (o.cfg.BotUserID != "" && msg.BroadcasterID != "" && msg.BroadcasterID == o.cfg.BotUserID)
-		if !sameAccount || !triggered || o.wasRecentlySent(trimmedText) {
+		if !sameAccountMode || !triggered || o.wasRecentlySent(trimmedText) {
 			return nil
 		}
 	}
@@ -197,7 +207,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "pause":
 			o.SetPaused(true)
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_paused"))
+				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_paused"))
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
@@ -205,7 +215,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "resume":
 			o.SetPaused(false)
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_resumed"))
+				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_resumed"))
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
@@ -236,7 +246,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 			}
 			reply := o.loc.Format("bot_status_fmt", activeName, stateStr, puestosStr)
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, reply)
+				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, reply)
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
@@ -244,7 +254,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "persona":
 			if len(fields) < 2 {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_usage_persona"))
+					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_usage_persona"))
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
@@ -253,13 +263,13 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 			newSpec, err := o.cfg.Persona.Switch(targetPersona)
 			if err != nil {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_persona_error")+err.Error())
+					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_persona_error")+err.Error())
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
 			}
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Format("bot_persona_activated", newSpec.Name))
+				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Format("bot_persona_activated", newSpec.Name))
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
@@ -267,7 +277,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "set":
 			if len(fields) < 3 {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_usage_set"))
+					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_usage_set"))
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
@@ -276,7 +286,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 			score, err := strconv.Atoi(fields[2])
 			if err != nil {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_invalid_affinity"))
+					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_invalid_affinity"))
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
@@ -337,7 +347,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 
 			reply := o.loc.Format("bot_affinity_updated", updatedProfile.DisplayName, updatedProfile.Affinity, updatedProfile.TierID)
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, reply)
+				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, reply)
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
@@ -345,7 +355,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		case "reset":
 			if len(fields) < 2 {
 				if o.cfg.Sender != nil {
-					_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, o.loc.Get("bot_usage_reset"))
+					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_usage_reset"))
 					atomic.AddInt64(&o.generatedReplies, 1)
 				}
 				return nil
@@ -371,7 +381,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 
 			reply := o.loc.Format("bot_profile_reset", displayName)
 			if o.cfg.Sender != nil {
-				_ = o.cfg.Sender.SendReply(ctx, msg.BroadcasterID, o.cfg.BotUserID, msg.MessageID, reply)
+				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, reply)
 				atomic.AddInt64(&o.generatedReplies, 1)
 			}
 			return nil
@@ -508,7 +518,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 	return nil
 }
 
-func matchTrigger(text string, spec *domain.PersonaSpec, botLogin string) (string, bool) {
+func matchTrigger(text string, spec *domain.PersonaSpec, botLogin string, sameAccountMode bool) (string, bool) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
 		return "", false
@@ -521,7 +531,10 @@ func matchTrigger(text string, spec *domain.PersonaSpec, botLogin string) (strin
 	if spec != nil && spec.BotName != "" {
 		prefixes = append(prefixes, "@"+spec.BotName)
 	}
-	if botLogin != "" {
+	// In 2-account mode, @<botLogin> triggers the bot. In 1-account mode (broadcaster == bot),
+	// @<botLogin> is the streamer's own handle, so exclude it to prevent false triggers when
+	// viewers mention the streamer or when Twitch prepends @<streamer> to threaded replies.
+	if botLogin != "" && !sameAccountMode {
 		prefixes = append(prefixes, "@"+botLogin)
 	}
 
@@ -631,11 +644,66 @@ func (o *Orchestrator) recordSentReply(text string) {
 	o.sentReplies[key] = now
 }
 
+func (o *Orchestrator) recordSentMessageID(messageID string) {
+	id := strings.TrimSpace(messageID)
+	if id == "" {
+		return
+	}
+	now := o.now()
+	o.sentMu.Lock()
+	defer o.sentMu.Unlock()
+	if o.sentMessageIDs == nil {
+		o.sentMessageIDs = make(map[string]time.Time)
+	}
+	for k, ts := range o.sentMessageIDs {
+		if now.Sub(ts) > sentReplyTTL {
+			delete(o.sentMessageIDs, k)
+		}
+	}
+	o.sentMessageIDs[id] = now
+}
+
+func (o *Orchestrator) wasSentMessageID(messageID string) bool {
+	id := strings.TrimSpace(messageID)
+	if id == "" {
+		return false
+	}
+	now := o.now()
+	o.sentMu.Lock()
+	defer o.sentMu.Unlock()
+	if o.sentMessageIDs == nil {
+		return false
+	}
+	for k, ts := range o.sentMessageIDs {
+		if now.Sub(ts) > sentReplyTTL {
+			delete(o.sentMessageIDs, k)
+		}
+	}
+	ts, ok := o.sentMessageIDs[id]
+	if !ok {
+		return false
+	}
+	return now.Sub(ts) <= sentReplyTTL
+}
+
+func stripLeadingMention(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if !strings.HasPrefix(trimmed, "@") {
+		return trimmed
+	}
+	idx := strings.IndexFunc(trimmed, unicode.IsSpace)
+	if idx == -1 {
+		return trimmed
+	}
+	return strings.TrimSpace(trimmed[idx:])
+}
+
 func (o *Orchestrator) wasRecentlySent(text string) bool {
 	key := strings.TrimSpace(text)
 	if key == "" {
 		return false
 	}
+	stripped := stripLeadingMention(key)
 	now := o.now()
 	o.sentMu.Lock()
 	defer o.sentMu.Unlock()
@@ -647,11 +715,15 @@ func (o *Orchestrator) wasRecentlySent(text string) bool {
 			delete(o.sentReplies, k)
 		}
 	}
-	ts, ok := o.sentReplies[key]
-	if !ok {
-		return false
+	if ts, ok := o.sentReplies[key]; ok && now.Sub(ts) <= sentReplyTTL {
+		return true
 	}
-	return now.Sub(ts) <= sentReplyTTL
+	if stripped != key {
+		if ts, ok := o.sentReplies[stripped]; ok && now.Sub(ts) <= sentReplyTTL {
+			return true
+		}
+	}
+	return false
 }
 
 func (o *Orchestrator) sendTrackedReply(ctx context.Context, broadcasterID, replyParentID, text string) error {
@@ -659,5 +731,13 @@ func (o *Orchestrator) sendTrackedReply(ctx context.Context, broadcasterID, repl
 		return nil
 	}
 	o.recordSentReply(text)
+	if tracked, ok := o.cfg.Sender.(domain.TrackedChatSender); ok {
+		msgID, err := tracked.SendTrackedReply(ctx, broadcasterID, o.cfg.BotUserID, replyParentID, text)
+		if err != nil {
+			return err
+		}
+		o.recordSentMessageID(msgID)
+		return nil
+	}
 	return o.cfg.Sender.SendReply(ctx, broadcasterID, o.cfg.BotUserID, replyParentID, text)
 }

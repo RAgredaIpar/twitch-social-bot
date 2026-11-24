@@ -991,3 +991,27 @@ func TestEventSubClient_Integration(t *testing.T) {
 
 	_ = esc.Close()
 }
+
+func TestHelixClient_SendTrackedReply_ReturnsMessageID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/messages" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"message_id":"msg-uuid-999","is_sent":true}]}`))
+	}))
+	defer srv.Close()
+
+	cli := twitch.NewHelixClient(twitch.HelixConfig{
+		ClientID:   "cid",
+		BaseURL:    srv.URL,
+		HTTPClient: srv.Client(),
+	})
+	msgID, err := cli.SendTrackedReply(context.Background(), "b1", "s1", "p1", "hola")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msgID != "msg-uuid-999" {
+		t.Fatalf("expected msg-uuid-999, got %q", msgID)
+	}
+}

@@ -20,6 +20,12 @@ type ChatSender interface {
 	SendReply(ctx context.Context, broadcasterID, senderID, replyParentID, text string) error
 }
 
+// TrackedChatSender is optionally implemented by senders that return the platform message ID
+// assigned to the outgoing message (e.g. Twitch Helix POST /chat/messages).
+type TrackedChatSender interface {
+	SendTrackedReply(ctx context.Context, broadcasterID, senderID, replyParentID, text string) (string, error)
+}
+
 type PersonaProvider interface {
 	Current() *PersonaSpec
 	Switch(idOrFile string) (*PersonaSpec, error)

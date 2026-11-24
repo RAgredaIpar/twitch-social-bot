@@ -14,7 +14,10 @@ import (
 	"github.com/twitch-social-bot/internal/domain"
 )
 
-var _ domain.ChatSender = (*HelixClient)(nil)
+var (
+	_ domain.ChatSender        = (*HelixClient)(nil)
+	_ domain.TrackedChatSender = (*HelixClient)(nil)
+)
 
 type HelixConfig struct {
 	ClientID     string
@@ -50,7 +53,14 @@ type sendReplyRequest struct {
 	ReplyParentMessageID string `json:"reply_parent_message_id,omitempty"`
 }
 
-func (h *HelixClient) SendReply(ctx context.Context, broadcasterID, senderID, replyParentID, text string) error {
+type sendReplyResponse struct {
+	Data []struct {
+		MessageID string `json:"message_id"`
+		IsSent    bool   `json:"is_sent"`
+	} `json:"data"`
+}
+
+func (h *HelixClient) SendTrackedReply(ctx context.Context, broadcasterID, senderID, replyParentID, text string) (string, error) {
 	payload := sendReplyRequest{
 		BroadcasterID:        broadcasterID,
 		SenderID:             senderID,
@@ -60,13 +70,26 @@ func (h *HelixClient) SendReply(ctx context.Context, broadcasterID, senderID, re
 
 	bodyBytes, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal reply payload: %w", err)
+		return "", fmt.Errorf("failed to marshal reply payload: %w", err)
 	}
 
 	endpoint := strings.TrimRight(h.cfg.BaseURL, "/") + "/chat/messages"
-	return h.doRequestWithRetry(ctx, http.MethodPost, endpoint, bodyBytes, func(statusCode int) bool {
+	var out sendReplyResponse
+	err = h.doRequestWithRetry(ctx, http.MethodPost, endpoint, bodyBytes, func(statusCode int) bool {
 		return statusCode >= 200 && statusCode < 300
-	})
+	}, &out)
+	if err != nil {
+		return "", err
+	}
+	if len(out.Data) > 0 {
+		return strings.TrimSpace(out.Data[0].MessageID), nil
+	}
+	return "", nil
+}
+
+func (h *HelixClient) SendReply(ctx context.Context, broadcasterID, senderID, replyParentID, text string) error {
+	_, err := h.SendTrackedReply(ctx, broadcasterID, senderID, replyParentID, text)
+	return err
 }
 
 type createSubRequest struct {
