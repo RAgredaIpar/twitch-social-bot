@@ -4,6 +4,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -77,4 +78,70 @@ func ReadNavKey(in io.Reader, reader *bufio.Reader) (KeyEvent, string, error) {
 		}
 	}
 	return KeyOther, "", nil
+}
+
+// LiveKey represents keyboard commands during live bot execution.
+type LiveKey int
+
+const (
+	LiveKeyNone LiveKey = iota
+	LiveKeyToggleLogs
+	LiveKeyBackToMenu
+	LiveKeyQuit
+)
+
+// StartLiveKeyReader reads single-key commands (L to toggle logs, Q/Esc to return
+// to the start menu, Ctrl+C to quit) from a POSIX TTY until ctx is canceled.
+func StartLiveKeyReader(ctx context.Context) <-chan LiveKey {
+	ch := make(chan LiveKey, 8)
+	if !IsInteractiveTTY() {
+		close(ch)
+		return ch
+	}
+	go func() {
+		defer close(ch)
+		_ = exec.Command("stty", "-F", "/dev/tty", "cbreak", "min", "1", "-echo").Run()
+		defer func() {
+			_ = exec.Command("stty", "-F", "/dev/tty", "sane").Run()
+		}()
+
+		tty, err := os.Open("/dev/tty")
+		if err != nil {
+			tty = os.Stdin
+		} else {
+			defer tty.Close()
+		}
+
+		go func() {
+			<-ctx.Done()
+			if tty != os.Stdin {
+				_ = tty.Close()
+			}
+		}()
+
+		buf := make([]byte, 1)
+		for {
+			n, rErr := tty.Read(buf)
+			if rErr != nil || n == 0 {
+				return
+			}
+			var lk LiveKey
+			switch buf[0] {
+			case 'l', 'L':
+				lk = LiveKeyToggleLogs
+			case 'q', 'Q', 0x1b:
+				lk = LiveKeyBackToMenu
+			case 3:
+				lk = LiveKeyQuit
+			}
+			if lk != LiveKeyNone {
+				select {
+				case ch <- lk:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	return ch
 }

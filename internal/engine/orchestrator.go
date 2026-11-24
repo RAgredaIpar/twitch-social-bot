@@ -31,21 +31,41 @@ type Status struct {
 	GeneratedReplies  int64                          `json:"generated_replies"`
 }
 
+// ActivityKind identifies live UI lifecycle events emitted by Orchestrator.
+type ActivityKind string
+
+const (
+	ActivityThinking ActivityKind = "thinking"
+	ActivityReplied  ActivityKind = "replied"
+	ActivityError    ActivityKind = "error"
+)
+
+// ActivityEvent describes a real-time chat interaction state for live UI rendering.
+type ActivityEvent struct {
+	Kind        ActivityKind
+	Username    string
+	UserMessage string
+	BotReply    string
+	Persona     *domain.PersonaSpec
+	Error       string
+}
+
 // OrchestratorConfig holds the dependencies required by Orchestrator.
 type OrchestratorConfig struct {
-	BotUserID string
-	BotLogin  string
-	Clock     domain.Clock
-	Store     domain.Store
-	LLM       domain.LLMClient
-	Sender    domain.ChatSender
-	Persona   domain.PersonaProvider
-	Limiter   *ratelimit.CooldownLimiter
-	Room      *room.Buffer
+	BotUserID   string
+	BotLogin    string
+	Clock       domain.Clock
+	Store       domain.Store
+	LLM         domain.LLMClient
+	Sender      domain.ChatSender
+	Persona     domain.PersonaProvider
+	Limiter     *ratelimit.CooldownLimiter
+	Room        *room.Buffer
 	Social      *social.Engine
 	Guard       *safety.Guard
 	Locale      *i18n.Manager
 	ChannelInfo domain.ChannelInfoFetcher
+	OnActivity  func(ActivityEvent)
 }
 
 // Orchestrator coordinates chat messaging, rate limiting, room buffer,
@@ -206,18 +226,12 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		switch cmd {
 		case "pause":
 			o.SetPaused(true)
-			if o.cfg.Sender != nil {
-				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_paused"))
-				atomic.AddInt64(&o.generatedReplies, 1)
-			}
+			o.sendAdminReply(ctx, msg, spec, o.loc.Get("bot_paused"))
 			return nil
 
 		case "resume":
 			o.SetPaused(false)
-			if o.cfg.Sender != nil {
-				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_resumed"))
-				atomic.AddInt64(&o.generatedReplies, 1)
-			}
+			o.sendAdminReply(ctx, msg, spec, o.loc.Get("bot_resumed"))
 			return nil
 
 		case "status":
@@ -244,51 +258,32 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 			if len(slotsSummary) > 0 {
 				puestosStr = strings.Join(slotsSummary, ", ")
 			}
-			reply := o.loc.Format("bot_status_fmt", activeName, stateStr, puestosStr)
-			if o.cfg.Sender != nil {
-				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, reply)
-				atomic.AddInt64(&o.generatedReplies, 1)
-			}
+			o.sendAdminReply(ctx, msg, spec, o.loc.Format("bot_status_fmt", activeName, stateStr, puestosStr))
 			return nil
 
 		case "persona":
 			if len(fields) < 2 {
-				if o.cfg.Sender != nil {
-					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_usage_persona"))
-					atomic.AddInt64(&o.generatedReplies, 1)
-				}
+				o.sendAdminReply(ctx, msg, spec, o.loc.Get("bot_usage_persona"))
 				return nil
 			}
 			targetPersona := fields[1]
 			newSpec, err := o.cfg.Persona.Switch(targetPersona)
 			if err != nil {
-				if o.cfg.Sender != nil {
-					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_persona_error")+err.Error())
-					atomic.AddInt64(&o.generatedReplies, 1)
-				}
+				o.sendAdminReply(ctx, msg, spec, o.loc.Get("bot_persona_error")+err.Error())
 				return nil
 			}
-			if o.cfg.Sender != nil {
-				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Format("bot_persona_activated", newSpec.Name))
-				atomic.AddInt64(&o.generatedReplies, 1)
-			}
+			o.sendAdminReply(ctx, msg, newSpec, o.loc.Format("bot_persona_activated", newSpec.Name))
 			return nil
 
 		case "set":
 			if len(fields) < 3 {
-				if o.cfg.Sender != nil {
-					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_usage_set"))
-					atomic.AddInt64(&o.generatedReplies, 1)
-				}
+				o.sendAdminReply(ctx, msg, spec, o.loc.Get("bot_usage_set"))
 				return nil
 			}
 			targetUser := strings.TrimPrefix(fields[1], "@")
 			score, err := strconv.Atoi(fields[2])
 			if err != nil {
-				if o.cfg.Sender != nil {
-					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_invalid_affinity"))
-					atomic.AddInt64(&o.generatedReplies, 1)
-				}
+				o.sendAdminReply(ctx, msg, spec, o.loc.Get("bot_invalid_affinity"))
 				return nil
 			}
 
@@ -345,19 +340,12 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 				return fmt.Errorf("save profile: %w", err)
 			}
 
-			reply := o.loc.Format("bot_affinity_updated", updatedProfile.DisplayName, updatedProfile.Affinity, updatedProfile.TierID)
-			if o.cfg.Sender != nil {
-				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, reply)
-				atomic.AddInt64(&o.generatedReplies, 1)
-			}
+			o.sendAdminReply(ctx, msg, spec, o.loc.Format("bot_affinity_updated", updatedProfile.DisplayName, updatedProfile.Affinity, updatedProfile.TierID))
 			return nil
 
 		case "reset":
 			if len(fields) < 2 {
-				if o.cfg.Sender != nil {
-					_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, o.loc.Get("bot_usage_reset"))
-					atomic.AddInt64(&o.generatedReplies, 1)
-				}
+				o.sendAdminReply(ctx, msg, spec, o.loc.Get("bot_usage_reset"))
 				return nil
 			}
 			targetUser := strings.TrimPrefix(fields[1], "@")
@@ -379,11 +367,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 				o.cfg.Limiter.ResetUser(targetUserID)
 			}
 
-			reply := o.loc.Format("bot_profile_reset", displayName)
-			if o.cfg.Sender != nil {
-				_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, reply)
-				atomic.AddInt64(&o.generatedReplies, 1)
-			}
+			o.sendAdminReply(ctx, msg, spec, o.loc.Format("bot_profile_reset", displayName))
 			return nil
 		}
 	}
@@ -459,6 +443,14 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		}
 	}
 
+	speakerName := activityAuthor(msg)
+	o.emitActivity(ActivityEvent{
+		Kind:        ActivityThinking,
+		Username:    speakerName,
+		UserMessage: cleanInput,
+		Persona:     spec,
+	})
+
 	decision, err := o.cfg.LLM.Generate(ctx, domain.PromptInput{
 		Persona:         spec,
 		Profile:         profile,
@@ -473,6 +465,13 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 		BroadcasterName: broadcasterName,
 	})
 	if err != nil {
+		o.emitActivity(ActivityEvent{
+			Kind:        ActivityError,
+			Username:    speakerName,
+			UserMessage: cleanInput,
+			Persona:     spec,
+			Error:       err.Error(),
+		})
 		return fmt.Errorf("llm generate: %w", err)
 	}
 	o.mood.Record(decision.AffinityDelta)
@@ -519,10 +518,24 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, msg domain.ChatMessage
 
 	if o.cfg.Sender != nil {
 		if err := o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, safeReply); err != nil {
+			o.emitActivity(ActivityEvent{
+				Kind:        ActivityError,
+				Username:    speakerName,
+				UserMessage: cleanInput,
+				Persona:     spec,
+				Error:       err.Error(),
+			})
 			return fmt.Errorf("send reply: %w", err)
 		}
 		atomic.AddInt64(&o.generatedReplies, 1)
 	}
+	o.emitActivity(ActivityEvent{
+		Kind:        ActivityReplied,
+		Username:    speakerName,
+		UserMessage: cleanInput,
+		BotReply:    safeReply,
+		Persona:     spec,
+	})
 
 	return nil
 }
@@ -749,4 +762,31 @@ func (o *Orchestrator) sendTrackedReply(ctx context.Context, broadcasterID, repl
 		return nil
 	}
 	return o.cfg.Sender.SendReply(ctx, broadcasterID, o.cfg.BotUserID, replyParentID, text)
+}
+
+func (o *Orchestrator) sendAdminReply(ctx context.Context, msg domain.ChatMessage, spec *domain.PersonaSpec, reply string) {
+	if o.cfg.Sender != nil {
+		_ = o.sendTrackedReply(ctx, msg.BroadcasterID, msg.MessageID, reply)
+		atomic.AddInt64(&o.generatedReplies, 1)
+	}
+	o.emitActivity(ActivityEvent{
+		Kind:        ActivityReplied,
+		Username:    activityAuthor(msg),
+		UserMessage: strings.TrimSpace(msg.Text),
+		BotReply:    reply,
+		Persona:     spec,
+	})
+}
+
+func (o *Orchestrator) emitActivity(ev ActivityEvent) {
+	if o.cfg.OnActivity != nil {
+		o.cfg.OnActivity(ev)
+	}
+}
+
+func activityAuthor(msg domain.ChatMessage) string {
+	if d := strings.TrimSpace(msg.DisplayName); d != "" {
+		return d
+	}
+	return strings.TrimSpace(msg.Username)
 }

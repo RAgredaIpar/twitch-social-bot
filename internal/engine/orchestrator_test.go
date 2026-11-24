@@ -807,3 +807,53 @@ func TestHandleMessage_SameAccountBroadcasterMode(t *testing.T) {
 		t.Fatalf("expected viewer @BotName mention to trigger bot, got %d LLM calls", llmCli.callCount)
 	}
 }
+
+func TestHandleMessage_EmitsLiveActivityEvents(t *testing.T) {
+	fakeClock := domain.NewFakeClock(time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC))
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	var events []engine.ActivityEvent
+	orch := engine.NewOrchestrator(engine.OrchestratorConfig{
+		BotUserID: "bot_1",
+		BotLogin:  "mochibot",
+		Clock:     fakeClock,
+		Store:     st,
+		LLM: &mockLLMClient{
+			decision: domain.LLMDecision{Reply: "de una bro", AffinityDelta: 1},
+		},
+		Sender:  &mockChatSender{},
+		Persona: newMockPersonaProvider(samplePersona()),
+		Limiter: ratelimit.NewCooldownLimiter(fakeClock, 3*time.Second, 8*time.Second),
+		Room:    room.NewBuffer(fakeClock, 25, 10*time.Minute),
+		Social:  social.NewEngine(fakeClock),
+		Guard:   safety.NewGuard(400, 480),
+		OnActivity: func(ev engine.ActivityEvent) {
+			events = append(events, ev)
+		},
+	})
+
+	if err := orch.HandleMessage(context.Background(), domain.ChatMessage{
+		MessageID:     "m_live_1",
+		BroadcasterID: "b1",
+		UserID:        "u1",
+		Username:      "viewer1",
+		DisplayName:   "Viewer1",
+		Text:          "!bot hola mochi",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(events) != 2 {
+		t.Fatalf("expected 2 live activity events (thinking + replied), got %d: %+v", len(events), events)
+	}
+	if events[0].Kind != engine.ActivityThinking || events[0].Username != "Viewer1" {
+		t.Fatalf("unexpected first event: %+v", events[0])
+	}
+	if events[1].Kind != engine.ActivityReplied || events[1].BotReply != "de una bro" {
+		t.Fatalf("unexpected second event: %+v", events[1])
+	}
+}

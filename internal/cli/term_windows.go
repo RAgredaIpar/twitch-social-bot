@@ -4,20 +4,23 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
 const enableVirtualTerminalProcessing = 0x0004
 
 var (
-	kernel32            = syscall.NewLazyDLL("kernel32.dll")
-	procGetConsoleMode  = kernel32.NewProc("GetConsoleMode")
-	procSetConsoleMode  = kernel32.NewProc("SetConsoleMode")
-	procReadConsoleInput = kernel32.NewProc("ReadConsoleInputW")
+	kernel32               = syscall.NewLazyDLL("kernel32.dll")
+	procGetConsoleMode     = kernel32.NewProc("GetConsoleMode")
+	procSetConsoleMode     = kernel32.NewProc("SetConsoleMode")
+	procReadConsoleInput   = kernel32.NewProc("ReadConsoleInputW")
+	procGetNumConsoleInput = kernel32.NewProc("GetNumberOfConsoleInputEvents")
 )
 
 // KeyEvent represents a normalized navigation key press.
@@ -119,4 +122,81 @@ func ReadNavKey(in io.Reader, reader *bufio.Reader) (KeyEvent, string, error) {
 			return KeyOther, string(ch), nil
 		}
 	}
+}
+
+// LiveKey represents non-blocking keyboard commands during live bot execution.
+type LiveKey int
+
+const (
+	LiveKeyNone LiveKey = iota
+	LiveKeyToggleLogs
+	LiveKeyBackToMenu
+	LiveKeyQuit
+)
+
+// StartLiveKeyReader polls the Windows Console non-blockingly for L (toggle logs),
+// Q/Esc (return to main menu), and Ctrl+C (exit application) until ctx is canceled.
+func StartLiveKeyReader(ctx context.Context) <-chan LiveKey {
+	ch := make(chan LiveKey, 8)
+	if !IsInteractiveTTY() {
+		close(ch)
+		return ch
+	}
+	go func() {
+		defer close(ch)
+		h := syscall.Handle(os.Stdin.Fd())
+		ticker := time.NewTicker(60 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				for {
+					var count uint32
+					r, _, _ := procGetNumConsoleInput.Call(uintptr(h), uintptr(unsafe.Pointer(&count)))
+					if r == 0 || count == 0 {
+						break
+					}
+					var rec inputRecord
+					var readCount uint32
+					r, _, _ = procReadConsoleInput.Call(
+						uintptr(h),
+						uintptr(unsafe.Pointer(&rec)),
+						1,
+						uintptr(unsafe.Pointer(&readCount)),
+					)
+					if r == 0 || readCount == 0 {
+						break
+					}
+					if rec.EventType != 0x0001 {
+						continue
+					}
+					ke := (*keyEventRecord)(unsafe.Pointer(&rec.Event[0]))
+					if ke.KeyDown == 0 {
+						continue
+					}
+					ru := rune(ke.UnicodeChar)
+					var lk LiveKey
+					switch {
+					case ru == 3:
+						lk = LiveKeyQuit
+					case ke.VirtualKeyCode == 0x1B || ru == 'q' || ru == 'Q':
+						lk = LiveKeyBackToMenu
+					case ru == 'l' || ru == 'L':
+						lk = LiveKeyToggleLogs
+					}
+					if lk != LiveKeyNone {
+						select {
+						case ch <- lk:
+						case <-ctx.Done():
+							return
+						}
+					}
+				}
+			}
+		}
+	}()
+	return ch
 }

@@ -1,21 +1,17 @@
-## Twitch Social Bot v2.2.1
+## Twitch Social Bot v2.3.0
 
-### What's New & Improvements / Novedades y Mejoras
+### What's New / Novedades
 
-- **Passive Memory & Anti-Topic-Loop / Memoria Pasiva Anti-Calzador**
-  - **EN:** Added `SelectContextualFacts` to cool down `Facts` the bot just mentioned in the previous reply when the viewer's current message is about something else (while keeping them whenever the viewer actually mentions or asks about that topic). Added `[PASSIVE MEMORY]` guidance and `DetectRepeatedTermsForTurn` to stop unprompted 2-turn topic loops without hardcoding banned topics.
-  - **ES:** Se añadió `SelectContextualFacts` para enfriar temporalmente los `Facts` recién mencionados en el turno anterior cuando el espectador cambia de tema (manteniéndolos siempre si el usuario pregunta o habla de ellos). Se añadió la directiva `[MEMORIA PASIVA]` y `DetectRepeatedTermsForTurn` para frenar temas repetidos en 2 turnos seguidos sin calzar datos viejos en conversaciones que no tienen relación.
+- **Interactive Live Broadcast Desk CLI & Speaking Ring / Panel Animado en Vivo y Speaking Ring**
+  - **EN:** While running in interactive mode, the bot now renders a live terminal dashboard instead of static log lines: displays the active persona's truecolor Braille avatar (`AvatarForPersona`) surrounded by a reactive **Speaking Ring** (`[  IDLE  ]` → `[ THINK  ]` → `[ ON AIR ]` / `[ SPEAK  ]`), a live Braille neural/audio equalizer, real-time message/reply counters, and the latest `[IN]` / `[BOT]` interaction. Switching personas mid-stream (`!bot persona ...`) updates the avatar, theme color, and labels automatically.
+  - **ES:** Mientras el bot está en ejecución en modo interactivo, ahora muestra un panel animado en vivo sin emojis ni descuadres: avatar Braille real de la persona activa (compatible con las 4 personas base, personalizadas y tarjetas V2/V3 importadas) rodeado de un **Speaking Ring** reactivo (`[  IDLE  ]` → `[ THINK  ]` → `[ ON AIR ]`), ecualizador Braille en tiempo real, contadores de mensajes/respuestas y la última interacción `[IN]` / `[BOT]`.
 
-- **Persona Attribution in Conversation History / Identidad por Personaje al Cambiar de Persona**
-  - **EN:** `ConversationTurn` now records `BotName` and `PersonaID` (`omitempty`, 100% backward-compatible with existing `data/social.db`). When switching personas mid-stream (e.g. Mochi ↔ Celeste ↔ Dante), recent turns are labeled with the speaker's actual name and inject a style-isolation guard so the new persona keeps context without copying the previous persona's tone.
-  - **ES:** `ConversationTurn` ahora guarda `BotName` y `PersonaID` (compatible con tu `data/social.db` actual). Al cambiar de personalidad en vivo, el historial etiqueta quién respondió (`Mochi:`, `Celeste:`, `Dante:`) y protege la voz del personaje activo para no contagiarse del tono anterior.
-
-- **Balanced Mochi Banter & Complicity / Balance entre Vacile y Complicidad en Mochi**
-  - **EN:** Refined `personas/cohost_amigos.yaml` (`bio`, `style`, `message_examples`) so Mochi alternates sharp banter with genuine co-host complicity during long streams.
-  - **ES:** Se afinó `personas/cohost_amigos.yaml` para que Mochi alterne su humor filoso con complicidad genuina y charla de chill en streams largos.
+- **Instant Live `[LOGS]` Mode & Return to Start Menu / Modo `[LOGS]` y Regreso al Menú**
+  - **EN:** Standard runtime logs are captured cleanly in a 200-line ring buffer (`LogBuffer`) so they never corrupt the UI. Press **`L`** at any time to switch to `[LOGS]` for live debugging (and **`L`** again to return to the animation). Press **`Q` or `Esc`** to stop the active bot session cleanly and return straight to the start menu (or **`Ctrl+C`** to exit). Headless `--run` mode keeps classic stderr logging unchanged.
+  - **ES:** Los logs en tiempo real se capturan en un buffer circular de 200 líneas sin romper el dibujo. Presiona **`L`** en cualquier momento para ver los **`[LOGS]`** en vivo (y **`L`** otra vez para volver). Presiona **`Q` o `Esc`** para detener la sesión y regresar al menú de inicio sin cerrar el programa (o **`Ctrl+C`** para salir). El modo `--run` conserva los logs clásicos por consola.
 
 ---
 
 ### How to Update / Cómo Actualizar
-- **From v2.2.0 / v2.1.x / v2.0.0 / v1.x:** Open `twitch-social-bot.exe` and press **Enter** on **Update now and restart** (**Actualizar ahora y reiniciar**)—your `.env`, `.tokens.json`, custom `personas/`, and `data/` memory are preserved automatically.
+- **From v2.2.x / v2.1.x / v2.0.0 / v1.x:** Open `twitch-social-bot.exe` and press **Enter** on **Update now and restart** (**Actualizar ahora y reiniciar**)—your `.env`, `.tokens.json`, custom `personas/`, and `data/` memory are preserved automatically.
 - **New users:** Download `twitch-social-bot-windows.zip` below, extract it, and double-click `twitch-social-bot.exe`.

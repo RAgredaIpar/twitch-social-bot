@@ -5,11 +5,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -94,17 +96,29 @@ func main() {
 			}
 		}
 
-		shouldStart, updatedCfg, cliErr := cli.RunInteractive(os.Stdin, os.Stdout, *envFile, cfg, loc, pm)
-		if cliErr != nil {
-			log.Fatalf("CLI error: %v", cliErr)
+		for {
+			shouldStart, updatedCfg, cliErr := cli.RunInteractive(os.Stdin, os.Stdout, *envFile, cfg, loc, pm)
+			if cliErr != nil {
+				log.Fatalf("CLI error: %v", cliErr)
+			}
+			if !shouldStart {
+				return
+			}
+			cfg = updatedCfg
+			if !runBotSession(ctx, stop, cfg, loc, pm, true) {
+				return
+			}
 		}
-		if !shouldStart {
-			return
-		}
-		cfg = updatedCfg
 	} else if strings.TrimSpace(cfg.LLMAPIKey) == "" {
 		log.Fatalf("LLM_API_KEY is required in headless mode (run without --run for interactive setup)")
 	}
+
+	runBotSession(ctx, stop, cfg, loc, pm, false)
+}
+
+func runBotSession(parentCtx context.Context, stopApp context.CancelFunc, cfg *config.Config, loc *i18n.Manager, pm *persona.Manager, interactiveLive bool) bool {
+	ctx, cancelSession := context.WithCancel(parentCtx)
+	defer cancelSession()
 
 	st, err := store.Open(cfg.StorePath)
 	if err != nil {
@@ -117,6 +131,15 @@ func main() {
 	}()
 
 	activePersona := pm.Current()
+	var logBuf *cli.LogBuffer
+	var activityCh chan engine.ActivityEvent
+	var eventSubReady atomic.Bool
+	if interactiveLive {
+		logBuf = cli.NewLogBuffer(200)
+		log.SetOutput(io.MultiWriter(os.Stderr, logBuf))
+		defer log.SetOutput(os.Stderr)
+		activityCh = make(chan engine.ActivityEvent, 64)
+	}
 	log.Printf("Active persona: %s [%s] | Language: %s", activePersona.Name, activePersona.BotName, loc.ActiveID())
 
 	clk := domain.NewRealClock()
@@ -202,19 +225,28 @@ func main() {
 	}
 
 	orch := engine.NewOrchestrator(engine.OrchestratorConfig{
-		BotUserID: botUserID,
-		BotLogin:  cfg.TwitchBotLogin,
-		Clock:     clk,
-		Store:     st,
-		LLM:       llmCli,
-		Sender:    sender,
-		Persona:   pm,
-		Limiter:   lim,
-		Room:      rm,
-		Social:    soc,
+		BotUserID:   botUserID,
+		BotLogin:    cfg.TwitchBotLogin,
+		Clock:       clk,
+		Store:       st,
+		LLM:         llmCli,
+		Sender:      sender,
+		Persona:     pm,
+		Limiter:     lim,
+		Room:        rm,
+		Social:      soc,
 		Guard:       grd,
 		Locale:      loc,
 		ChannelInfo: channelFetcher,
+		OnActivity: func(ev engine.ActivityEvent) {
+			if activityCh == nil {
+				return
+			}
+			select {
+			case activityCh <- ev:
+			default:
+			}
+		},
 	})
 
 	if cfg.HTTPAddr != "" {
@@ -241,6 +273,7 @@ func main() {
 					if err := helixClient.CreateChatSubscription(ctx, sessionID, broadcasterID, botUserID); err != nil {
 						log.Printf("Error suscribiendo a channel.chat.message: %v", err)
 					} else {
+						eventSubReady.Store(true)
 						log.Printf("¡Suscripción a chat confirmada!")
 					}
 				}
@@ -266,6 +299,36 @@ func main() {
 	}
 
 	log.Println("Bot iniciado y en ejecución. Presiona Ctrl+C para detener.")
-	<-ctx.Done()
+	backToMenu := false
+	if interactiveLive {
+		// Redirect standard logger exclusively into the ring buffer while the
+		// alternate-screen live dashboard owns the console.
+		log.SetOutput(logBuf)
+		dash := cli.NewLiveDashboard(cli.LiveDashboardConfig{
+			Version:       Version,
+			Broadcaster:   cfg.TwitchBroadcasterLogin,
+			BotLogin:      cfg.TwitchBotLogin,
+			HasTwitch:     hasTwitchCreds,
+			Persona:       pm,
+			Orchestrator:  orch,
+			Logs:          logBuf,
+			Locale:        loc,
+			Events:        activityCh,
+			EventSubReady: &eventSubReady,
+		})
+		dash.Run(ctx,
+			func() {
+				backToMenu = true
+				cancelSession()
+			},
+			func() {
+				stopApp()
+			},
+		)
+		log.SetOutput(os.Stderr)
+	} else {
+		<-ctx.Done()
+	}
 	log.Println("Señal de terminación recibida. Cerrando recursos...")
+	return backToMenu
 }
